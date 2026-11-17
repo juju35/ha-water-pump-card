@@ -269,10 +269,12 @@ class WaterPumpCard extends RcCard {
     return !!this._hass.themes?.darkMode;
   }
 
+  // Night picture: forced by illustration_theme, else Home Assistant's dark theme alone (a light theme keeps the day
+  // picture after sunset).
   _night() {
     const theme = this._config.illustration_theme;
     if (theme === "night" || theme === "day") return theme === "night";
-    return this._hass.states["sun.sun"]?.state === "below_horizon" || this._dark();
+    return this._dark();
   }
 
   _animate() {

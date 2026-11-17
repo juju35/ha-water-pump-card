@@ -187,3 +187,18 @@ test("editors: defaults stay out of the YAML, every field has a label", () => {
     assert.deepEqual(json(out), { type: `custom:${tag}`, entity: "switch.sump_pump" });
   }
 });
+
+test("night picture: the dark theme alone, a light theme stays day after sunset; illustration_theme wins", () => {
+  const sky = (sun, darkMode) => {
+    const h = makeHass();
+    h.states = { ...h.states, "sun.sun": { entity_id: "sun.sun", state: sun, attributes: {} } };
+    h.themes = { darkMode };
+    return h;
+  };
+  for (const tag of ["water-pump-card", "water-pump-mini-card"]) {
+    assert.equal(make(tag, SUMP, sky("below_horizon", false))._night(), false, `${tag}: light theme after sunset`);
+    assert.equal(make(tag, SUMP, sky("above_horizon", true))._night(), true, `${tag}: dark theme by day`);
+    assert.equal(make(tag, { ...SUMP, illustration_theme: "day" }, sky("below_horizon", true))._night(), false, `${tag}: forced day`);
+    assert.equal(make(tag, { ...SUMP, illustration_theme: "night" }, sky("above_horizon", false))._night(), true, `${tag}: forced night`);
+  }
+});

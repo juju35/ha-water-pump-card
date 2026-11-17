@@ -37,7 +37,7 @@ The cards share the look of the other ha-* cards (illustrated header with a stat
 - **Runs of the last 24 hours**: one bar per run on a day-long strip, from Home Assistant's history (`show_runs: false` hides it)
 - **Alerts** (red): the alarm sensor on (a high-level float, a fault; found on the device or set with `alarm`), the level at or above its alarm mark, the pump running non-stop longer than `max_run` minutes (10 for a sump pump, 30 for a water pump, never for an industrial one; `0` turns it off). Otherwise *No alarm*
 - **The switch**: a round button starts and stops the pump (`show_controls: false` removes it)
-- **Illustrated header**: a 90 px banner with the pump drawn in its place — a sump pump in its pit in the basement's soil, its water at the level and its alarm line, the discharge pipe running while it pumps; a water pump between its well and the tap, with its pressure gauge; an industrial pump on its skid, its motor's fan turning — on a ground strip; the name, the area and the state (*Pumping*, *Idle*, *Alert*) at the left, beside a round badge whose icon takes the state's colour. By night (the sun below the horizon or the dark theme; `illustration_theme: day | night` forces it) the scene is dark. `illustration: false` brings back the classic header
+- **Illustrated header**: a 90 px banner with the pump drawn in its place — a sump pump in its pit in the basement's soil, its water at the level and its alarm line, the discharge pipe running while it pumps; a water pump between its well and the tap, with its pressure gauge; an industrial pump on its skid, its motor's fan turning — on a ground strip; the name, the area and the state (*Pumping*, *Idle*, *Alert*) at the left, beside a round badge whose icon takes the state's colour. By night (with a dark Home Assistant theme; `illustration_theme: day | night` forces it) the scene is dark. `illustration: false` brings back the classic header
 - `animations: false` stops the water and the fan (also when the system asks for reduced motion)
 
 The kind of pump is found from its name (in any of the card's languages: *Pompe de relevage*, *Sump pump*, *Surpresseur*, *Brunnenpumpe*…), else set with `kind`:
@@ -142,7 +142,7 @@ entity: switch.sump_pump
 | `level_alarm` | number | `85` for a sump pump | The level (%) of the alarm: a mark, and an alert at or above it |
 | `max_run` | number | by kind | Minutes non-stop before an alert (`0`: never) |
 | `illustration` | boolean | `true` | Both: the illustrated header (`false`: the classic header) |
-| `illustration_theme` | string | `auto` | Both: `auto` (night with the sun below the horizon or with the dark theme), `day` or `night` |
+| `illustration_theme` | string | `auto` | Both: `auto` (follows the Home Assistant theme: night with a dark theme, day with a light theme), `day` or `night` |
 | `show_runs` | boolean | `true` | The runs of the last 24 hours |
 | `animations` | boolean | `true` | Running water and turning fan |
 | `show_controls` | boolean | `true` | The switch |
