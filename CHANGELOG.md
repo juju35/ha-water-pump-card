@@ -1,0 +1,12 @@
+# Changelog
+
+## 1.0.0 - 2026-11-17
+
+### Features
+- **Water pump card** (`custom:water-pump-card`): a pump read from its switch, its running sensor or its power (`threshold`) — pumping, idle, alert, offline — with *Pumping for 38 s* or *Last run 12 min ago*.
+- **Level gauge** of the pit or tank (a level sensor in %, `level`) with its start, stop and alarm marks (`level_start`, `level_stop`, `level_alarm`, 85 % for a sump pump by default).
+- **Three tiles**: pressure and flow when reported, today's cycles, their average, the volume pumped or the runtime, the power. **Runs of the last 24 hours** as bars on a day-long strip (`show_runs`).
+- **Alerts**: the alarm sensor (`alarm`, a high-level float or a fault), a level at or above its alarm mark, a run longer than `max_run` minutes (10 for a sump pump, 30 for a water pump). The pump's **switch** as a round button (`show_controls`).
+- **Illustrated header**: a 90 px banner with the pump in its place — a sump pump in its pit with the water at its level and the alarm line, a water pump between its well and the tap with its pressure gauge, an industrial pump and its motor on a skid — water running and fan turning while it pumps; the badge's icon in the state's colour and the status pill placed by measurement; kinds found from the name in 22 languages or set with `kind`; night mode (`illustration_theme`); `illustration: false` for the classic header.
+- **Water pump mini card** (`custom:water-pump-mini-card`): the banner with the state, the alerts, the level and the run as chips, and a zoom to the full card.
+- Visual editor for every option; labels in 22 languages, English in the bundle and the others loaded on demand.

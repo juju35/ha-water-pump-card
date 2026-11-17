@@ -1,0 +1,27 @@
+{
+  "name": "ha-water-pump-card",
+  "version": "1.0.0",
+  "description": "An illustrated Lovelace card for pumps — sump, water (well, booster) and industrial: whether it pumps, the level of its pit, its runs over 24 hours, cycles, pressure, flow and alerts.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/juju35/ha-water-pump-card.git"
+  },
+  "bugs": {
+    "url": "https://github.com/juju35/ha-water-pump-card/issues"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs && node --check dist/ha-water-pump-card.js",
+    "test": "node --test test/*.test.mjs",
+    "screenshots": "npm run build && node scripts/screenshots/water-pump.mjs && node scripts/screenshots/animations.mjs"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@mdi/js": "^7.4.47",
+    "acorn": "^8.19.0",
+    "css-tree": "^3.2.1",
+    "playwright": "^1.64.1"
+  }
+}
