@@ -6,7 +6,7 @@ import { setup, wsFor } from "./mock.mjs";
 // Stills: animations: false keeps the water and the fan at a fixed moment, so a capture only changes when the card does.
 const still = (file, s) => pair(file, { ...s, config: { animations: false, ...s.config } });
 const scenes = ["sump", "sump-idle", "sump-alert", "well", "industrial", "offline"].flatMap((scene) => still(scene, { scene }));
-await shoot({ prefix: "wp", tag: "water-pump-card", shots: [...scenes, ...still("well-night", { scene: "well", night: true })], setup, ws: wsFor });
+await shoot({ prefix: "wp", tag: "water-pump-card", shots: [...scenes, ...still("well-night", { scene: "well", config: { illustration_theme: "night" } })], setup, ws: wsFor });
 await shoot({
   prefix: "wp-mini",
   tag: "water-pump-mini-card",

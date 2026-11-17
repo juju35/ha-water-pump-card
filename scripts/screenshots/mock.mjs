@@ -34,14 +34,13 @@ export const setup = (s) => {
   const states = {
     [`switch.${id}_pump`]: st(`switch.${id}_pump`, na ? "unavailable" : "on", { friendly_name: v.name }),
     [`sensor.${id}_pump_power`]: st(`sensor.${id}_pump_power`, na ? "unavailable" : String(v.watts), { device_class: "power", unit_of_measurement: "W", friendly_name: `${v.name} Power` }),
-    "sun.sun": st("sun.sun", s.night ? "below_horizon" : "above_horizon", { friendly_name: "Sun" }),
   };
   if (v.level !== undefined) states[`sensor.${id}_level`] = st(`sensor.${id}_level`, v.level == null ? "unavailable" : String(v.level), { unit_of_measurement: "%", friendly_name: `${v.name} Pit level` });
   if (v.alarm) states[`binary_sensor.${id}_high_level`] = st(`binary_sensor.${id}_high_level`, v.alarm, { device_class: "problem", friendly_name: `${v.name} High level` });
   if (v.pressure != null) states[`sensor.${id}_pressure`] = st(`sensor.${id}_pressure`, String(v.pressure), { device_class: "pressure", unit_of_measurement: "bar", friendly_name: `${v.name} Pressure` });
   if (v.flow != null) states[`sensor.${id}_flow`] = st(`sensor.${id}_flow`, String(v.flow), { device_class: "volume_flow_rate", unit_of_measurement: "L/min", friendly_name: `${v.name} Flow` });
   if (v.volume != null) states[`sensor.${id}_water_today`] = st(`sensor.${id}_water_today`, String(v.volume), { device_class: "water", unit_of_measurement: "L", friendly_name: `${v.name} Water today` });
-  const entities = Object.fromEntries(Object.keys(states).filter((k) => !k.startsWith("sun.")).map((k) => [k, { entity_id: k, device_id: id, platform: "shelly" }]));
+  const entities = Object.fromEntries(Object.keys(states).map((k) => [k, { entity_id: k, device_id: id, platform: "shelly" }]));
   return {
     hass: {
       language: "en",
