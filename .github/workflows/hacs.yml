@@ -1,0 +1,51 @@
+name: HACS Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+  # Called by Release, so that a version is published only once these checks pass.
+  workflow_call:
+
+permissions:
+  contents: read
+
+# github.workflow is "Release" when called from Release: the group then stays distinct from this
+# workflow's own push run on main, so neither cancels the other. The event too: the checks the screenshot commit
+# dispatches on a pull request's branch have their own group, so a dispatched run stuck on GitHub's side (queued
+# with no job, impossible to cancel) cannot hold the pull request's own runs, nor theirs.
+concurrency:
+  group: hacs-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # A plugin is only loadable by HACS once a release carries its JS (dist/ is not committed),
+      # so the very first release cannot be validated beforehand: skip until one is published.
+      - name: Check for a published release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No release yet: HACS validation runs once the first release is published."
+          fi
+
+      - name: HACS validation
+        if: steps.release.outputs.exists == 'true'
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main
+        with:
+          category: plugin
