@@ -95,7 +95,8 @@ test("full card: pumping, the level gauge with its marks, tiles, runs and the sw
   assert.match(html, /<span class="wt" style="height:62%">/);
   assert.match(html, /Alarm 85 %/);
   assert.match(html, /Start 60 %/);
-  assert.match(html, /Pumping for 30 s/);
+  // The history is stamped when the card asks for it and the run read when it renders: a slow runner adds a second or two.
+  assert.match(html, /Pumping for 3[0-3] s/);
   assert.match(html, /Cycles today/);
   assert.match(html, /class="run"/);
   assert.match(html, /No alarm/);
@@ -109,7 +110,10 @@ test("alerts: the float, a high level, a run too long; idle; offline", async () 
   await settle();
   const a = alarm._items;
   assert.equal(a.state, "alert");
-  assert.deepEqual(json(a.alerts), ["Alarm", "High level 92 %", "Running non-stop for 14 min"]);
+  const alerts = json(a.alerts);
+  assert.deepEqual(alerts.slice(0, 2), ["Alarm", "High level 92 %"]);
+  assert.match(alerts[2], /^Running non-stop for 1[45] min$/, "a minute boundary may pass while the test runs");
+  assert.equal(alerts.length, 3);
   assert.match(alarm.shadowRoot.innerHTML, /<span class="bpt">Alert<\/span>/);
   const idle = make("water-pump-card", SUMP, makeHass({ watts: "0", level: "34", history: [[-60, 0], [-13, 650], [-12, 0]] }));
   await settle();
