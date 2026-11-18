@@ -10,6 +10,16 @@
 
 <p align="center"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/icon.svg" alt="Water Pump Card" width="120"></p>
 
+<p align="center">
+  <a href="https://www.shelly.com/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/shelly.png" alt="Shelly" width="48"></a>&nbsp;&nbsp;
+  <a href="https://esphome.io/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/esphome.png" alt="ESPHome" width="48"></a>&nbsp;&nbsp;
+  <a href="https://www.home-assistant.io/integrations/zha/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/zha.png" alt="Zigbee Home Automation" width="48"></a>&nbsp;&nbsp;
+  <a href="https://www.tp-link.com/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tplink.png" alt="TP-Link" width="48"></a>&nbsp;&nbsp;
+  <a href="https://www.tuya.com/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tuya.png" alt="Tuya" width="48"></a>&nbsp;&nbsp;
+  <a href="https://tasmota.github.io/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tasmota.png" alt="Tasmota" width="48"></a>&nbsp;&nbsp;
+  <a href="https://www.home-assistant.io/integrations/modbus/"><img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/modbus.png" alt="Modbus" width="48"></a>
+</p>
+
 An illustrated Lovelace card for **pumps** — a sump pump in its pit, a water pump by its well or booster, an industrial or circulation pump. Whether it pumps and for how long, the level of its pit or tank with its start, stop and alarm marks, its runs over the last 24 hours, today's cycles, their length and the runtime, the pressure, flow and volume pumped, and its alerts: a high-level float, a level too high, a pump that never stops. A smart plug on the pump is enough; a level, pressure or flow sensor makes it richer.
 
 [![Open your Home Assistant instance and open a repository inside the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=juju35&repository=ha-water-pump-card&category=plugin)
@@ -59,11 +69,11 @@ Any integration giving the pump's switch, a running binary sensor or a power sen
 
 | Integration | Pumps and sensors |
 |---|---|
-| [Shelly](https://www.home-assistant.io/integrations/shelly/) (built in) | A pump on a Shelly Plug, Plus 1PM, Pro 1PM or Pro 4PM (switch and power), Shelly Plus Uni for a float |
-| [ESPHome](https://www.home-assistant.io/integrations/esphome/) (built in) | Level (ultrasonic, pressure transducer), pressure, flow and float sensors |
-| [Zigbee Home Automation](https://www.home-assistant.io/integrations/zha/) (built in) and [Zigbee2MQTT](https://www.zigbee2mqtt.io/guide/usage/integrations/home_assistant.html) (MQTT) | Zigbee plugs with metering, water leak sensors as a high-level alarm |
-| [TP-Link Smart Home](https://www.home-assistant.io/integrations/tplink/), [Tuya](https://www.home-assistant.io/integrations/tuya/), [Tasmota](https://www.home-assistant.io/integrations/tasmota/) (built in) | Their plugs and relays |
-| [Modbus](https://www.home-assistant.io/integrations/modbus/) (built in) | Industrial and circulation pumps, variable-speed drives |
+| <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/shelly.png" alt="" width="16"> [Shelly](https://www.home-assistant.io/integrations/shelly/) (built in) | A pump on a Shelly Plug, Plus 1PM, Pro 1PM or Pro 4PM (switch and power), Shelly Plus Uni for a float |
+| <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/esphome.png" alt="" width="16"> [ESPHome](https://www.home-assistant.io/integrations/esphome/) (built in) | Level (ultrasonic, pressure transducer), pressure, flow and float sensors |
+| <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/zha.png" alt="" width="16"> [Zigbee Home Automation](https://www.home-assistant.io/integrations/zha/) (built in) and [Zigbee2MQTT](https://www.zigbee2mqtt.io/guide/usage/integrations/home_assistant.html) (MQTT) | Zigbee plugs with metering, water leak sensors as a high-level alarm |
+| <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tplink.png" alt="" width="16"> [TP-Link Smart Home](https://www.home-assistant.io/integrations/tplink/), <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tuya.png" alt="" width="16"> [Tuya](https://www.home-assistant.io/integrations/tuya/), <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/tasmota.png" alt="" width="16"> [Tasmota](https://www.home-assistant.io/integrations/tasmota/) (built in) | Their plugs and relays |
+| <img src="https://raw.githubusercontent.com/juju35/ha-water-pump-card/main/images/modbus.png" alt="" width="16"> [Modbus](https://www.home-assistant.io/integrations/modbus/) (built in) | Industrial and circulation pumps, variable-speed drives |
 | [Template](https://www.home-assistant.io/integrations/template/) (built in) | A level in % worked out from a distance, a running sensor of your own |
 
 When the card picks the wrong sensor, set it with `level`, `pressure`, `flow`, `volume` or `alarm`, and open an issue with the pump's entities so that the discovery learns it.
