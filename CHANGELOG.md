@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 - 2026-11-18
+
+### Maintenance
+
+- **README**: the supported integrations' logos (Shelly, ESPHome, ZHA, TP-Link, Tuya, Tasmota, Modbus) under the card's own logo and in the *Supported integrations* table.
+
 ## 1.0.1 - 2026-11-18
 
 ### Fixes
