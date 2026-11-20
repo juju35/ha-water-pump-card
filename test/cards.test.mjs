@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { makeHass } from "./hass.mjs";
 import { fakeNode, load } from "./load.mjs";
@@ -214,4 +215,80 @@ test("the minute timer runs while the card is on the page, even without ResizeOb
   assert.equal(wp.window.intervals.size, before + 1);
   card.disconnectedCallback();
   assert.equal(wp.window.intervals.size, before);
+});
+
+// The shared strings keep only what this card uses: a static key, an editor label or helper (`ed_<field>`), a plural
+// (`open_*`, `unavail_*`) or an alarm kind of the shared status. The room cards' keys (rooms, layout, thresholds…) are gone.
+test("shared strings: no unused key of the room cards", () => {
+  const src = ["shared", "water-pump-card"].map((f) => readFileSync(new URL(`../src/${f}.js`, import.meta.url), "utf8")).join("\n");
+  const code = src.replace(/const RC_I18N = \{[\s\S]*?\n\};/, "").replace(/const WP_I18N = \{[\s\S]*?\n\};/, "");
+  const flat = (schema) => schema.flatMap((f) => (f.schema ? [f, ...flat(f.schema)] : [f]));
+  const fields = new Set();
+  for (const tag of ["water-pump-card", "water-pump-mini-card"]) {
+    const ed = new (wp.customElements.get(`${tag}-editor`))();
+    ed.appendChild = () => {};
+    ed.setConfig({ type: `custom:${tag}`, entity: "switch.sump_pump" });
+    ed.hass = makeHass();
+    for (const f of flat(ed._form.schema)) fields.add(`ed_${f.name}`).add(`ed_${f.name}_helper`);
+  }
+  const dynamic = /^(open|unavail)_(one|few|many)$|^(leak|smoke|gas|co|detected|clear)$/;
+  const unused = json(Object.keys(wp.RC_I18N.en)).filter((k) => !fields.has(k) && !dynamic.test(k) && !new RegExp(`["'\`]${k}["'\`]`).test(code));
+  assert.deepEqual(unused, []);
+  for (const k of ["ed_rooms", "ed_layout", "ed_thresholds", "ed_columns", "rooms_all"]) assert.ok(!(k in wp.RC_I18N.en), k);
+});
+
+// Real devices name and class their entities in many ways: a Tuya plug (French names, kW, a diagnostic power first),
+// an ESPHome controller (a running sensor, a tank in %, a pressure in psi, a flow in m³/h), a hidden or other-device
+// entity never taken.
+test("discovery on varied devices: Tuya plug, ESPHome controller, hidden and foreign entities", () => {
+  const st = (entity_id, state, attributes = {}) => ({ entity_id, state, attributes });
+  const h = {
+    ...makeHass(),
+    devices: { tuya: { name: "Prise pompe de relevage" }, esp: { name: "Booster" } },
+    entities: {
+      "switch.prise_pompe_relevage": { device_id: "tuya", platform: "tuya" },
+      "sensor.prise_pompe_relevage_puissance_diag": { device_id: "tuya", platform: "tuya", entity_category: "diagnostic" },
+      "sensor.prise_pompe_relevage_puissance": { device_id: "tuya", platform: "tuya" },
+      "sensor.prise_pompe_relevage_niveau_cuve": { device_id: "tuya", platform: "tuya", hidden: true },
+      "sensor.other_level": { device_id: "other", platform: "zha" },
+      "binary_sensor.booster_running": { device_id: "esp", platform: "esphome" },
+      "sensor.booster_tank": { device_id: "esp", platform: "esphome" },
+      "sensor.booster_pressure": { device_id: "esp", platform: "esphome" },
+      "sensor.booster_flow": { device_id: "esp", platform: "esphome" },
+      "binary_sensor.booster_fault": { device_id: "esp", platform: "esphome" },
+    },
+    states: {
+      "switch.prise_pompe_relevage": st("switch.prise_pompe_relevage", "off", { friendly_name: "Prise pompe de relevage" }),
+      "sensor.prise_pompe_relevage_puissance_diag": st("sensor.prise_pompe_relevage_puissance_diag", "0.6", { device_class: "power", unit_of_measurement: "kW" }),
+      "sensor.prise_pompe_relevage_puissance": st("sensor.prise_pompe_relevage_puissance", "0.6", { device_class: "power", unit_of_measurement: "kW" }),
+      "sensor.prise_pompe_relevage_niveau_cuve": st("sensor.prise_pompe_relevage_niveau_cuve", "40", { unit_of_measurement: "%", friendly_name: "Niveau cuve" }),
+      "sensor.other_level": st("sensor.other_level", "10", { unit_of_measurement: "%", friendly_name: "Pit level" }),
+      "binary_sensor.booster_running": st("binary_sensor.booster_running", "unavailable", { device_class: "running", friendly_name: "Booster running" }),
+      "sensor.booster_tank": st("sensor.booster_tank", "70", { unit_of_measurement: "%", friendly_name: "Booster tank" }),
+      "sensor.booster_pressure": st("sensor.booster_pressure", "45", { unit_of_measurement: "psi", friendly_name: "Booster pressure" }),
+      "sensor.booster_flow": st("sensor.booster_flow", "1.2", { unit_of_measurement: "m³/h", friendly_name: "Booster flow" }),
+      "binary_sensor.booster_fault": st("binary_sensor.booster_fault", "off", { device_class: "problem", friendly_name: "Booster fault" }),
+    },
+  };
+  const t = wp.wpFind(h, "switch.prise_pompe_relevage");
+  // The primary power sensor before the diagnostic one; the hidden level and the other device's level are not taken.
+  assert.deepEqual([t.switch, t.power, t.level, t.alarm], ["switch.prise_pompe_relevage", "sensor.prise_pompe_relevage_puissance", undefined, undefined]);
+  assert.equal(wp.wpKindOf("Prise pompe de relevage"), "sump");
+  const e = wp.wpFind(h, "binary_sensor.booster_running");
+  // An unavailable running sensor stays the pump's entity; the others found by unit and class.
+  assert.deepEqual([e.running, e.level, e.pressure, e.flow, e.alarm, e.switch], ["binary_sensor.booster_running", "sensor.booster_tank", "sensor.booster_pressure", "sensor.booster_flow", "binary_sensor.booster_fault", undefined]);
+  // Pumps of the home: the switch first, then the running sensor; nothing without a pump name.
+  const found = json(wp.wpPumps(h));
+  assert.equal(found[0], "switch.prise_pompe_relevage");
+  assert.ok(found.indexOf("binary_sensor.booster_running") > 0);
+  assert.ok(!found.includes("sensor.other_level"));
+});
+
+test("mini card size: two rows with the banner, one without", () => {
+  const Mini = cards["water-pump-mini-card"];
+  const m = new Mini();
+  m._config = { entity: "switch.sump_pump" };
+  assert.equal(m.getCardSize(), 2);
+  m._config = { entity: "switch.sump_pump", illustration: false };
+  assert.equal(m.getCardSize(), 1);
 });
