@@ -7,88 +7,10 @@
 const RC_VERSION = "__VERSION__";
 
 // ── Discovery rules ──────────────────────────────────────────────────────────
-const RC_OPENING_CLASSES = ["moisture", "smoke", "carbon_monoxide", "gas", "door", "window", "opening", "garage_door"];
-// Safety sensors: an active state is an alarm, not an opening. Most serious first: it names the room's status.
-const RC_ALERT_KINDS = {
-  smoke: { dc: "smoke", on: "mdi:smoke-detector-alert", off: "mdi:smoke-detector" },
-  co: { dc: "carbon_monoxide", on: "mdi:molecule-co", off: "mdi:molecule-co" },
-  gas: { dc: "gas", on: "mdi:gas-cylinder", off: "mdi:gas-cylinder" },
-  leak: { dc: "moisture", on: "mdi:water-alert", off: "mdi:water-check" },
-};
-const RC_ALERT_ORDER = Object.keys(RC_ALERT_KINDS);
-// Alert kind of a device class (`leak`, `smoke`, `co`, `gas`), or undefined for any other class.
-const rcAlertKind = (dc) => RC_ALERT_ORDER.find((k) => RC_ALERT_KINDS[k].dc === dc);
-// The most serious alert kind among `kinds`, `leak` when none is known.
-const rcTopAlert = (kinds) => RC_ALERT_ORDER.find((k) => kinds.includes(k)) || "leak";
-const RC_PRESENCE_CLASSES = ["occupancy", "presence", "motion"];
-// A switch driving a light belongs to the lights card, a switch that is a plug to the plugs card.
-const RC_LIGHT_NAME = /(^|\s)(lumi[eè]re|lampe|lamp|light|veilleuse|guirlande)(\s|$)/i;
-const RC_PLUG_NAME = /(^|\s)(prise|multiprise|plug|outlet|socket)(\s|$)/i;
 const RC_HOLD_MS = 500;
 const RC_MOVE_PX = 8;
 // A held arrow key repeats some 30 times a second: one brightness step every RC_REPEAT_MS at most.
 const RC_REPEAT_MS = 150;
-
-const rcIsLightSwitch = (st) => RC_LIGHT_NAME.test(st.attributes.friendly_name || "");
-const rcIsPlug = (st) =>
-  !rcIsLightSwitch(st) && (st.attributes.device_class === "outlet" || RC_PLUG_NAME.test(st.attributes.friendly_name || ""));
-
-// What each room card shows, shared with the Overview so that both count the same entities.
-// Detections that are not about people, which cameras report as motion: pets never count, vehicles only outdoors.
-const RC_PET = /(^|[\s_.-])(pets?|animals?|animaux|chiens?|chats?|dogs?|cats?)($|[\s_-])/i;
-const RC_VEHICLE = /(^|[\s_.-])(vehicles?|v[ée]hicules?|voitures?|cars?)($|[\s_-])/i;
-// An outdoor room, from its name: garden, terrace, balcony, patio, yard, driveway, porch, gate, parking…
-const RC_OUTDOOR =
-  /jardin|terrasse|balcon|patio|ext[ée]rieur|cour(\s|$)|all[ée]e|porche|portail|parking|garden|terrace|balcony|outdoor|outside|yard|driveway|porch|gate/i;
-const rcIsOutdoor = (area) => !!area && RC_OUTDOOR.test(`${area.name || ""} ${area.area_id || ""}`);
-
-// Sensors card: leak, door, window and opening sensors, plus presence and motion unless `presence` is false. Camera
-// detections count, except pets, and vehicles outside an `outdoor` room.
-const rcMatchSensor = (hass, id, { presence = true, outdoor = false } = {}) => {
-  if (!id.startsWith("binary_sensor.")) return false;
-  const st = hass.states[id];
-  const dc = st?.attributes.device_class;
-  if (RC_OPENING_CLASSES.includes(dc)) return true;
-  if (presence === false || !RC_PRESENCE_CLASSES.includes(dc)) return false;
-  const name = `${id} ${st.attributes.friendly_name || ""}`;
-  if (RC_PET.test(name)) return false;
-  return outdoor || !RC_VEHICLE.test(name);
-};
-// Lights card: lights (groups excepted) and switches driving a light, configuration and diagnostic entities excepted.
-const rcMatchLight = (hass, id) => {
-  const st = hass.states[id];
-  if (!st || hass.entities?.[id]?.entity_category) return false;
-  if (id.startsWith("light.")) return !Array.isArray(st.attributes.entity_id);
-  return id.startsWith("switch.") && rcIsLightSwitch(st);
-};
-// Plugs card: switches that are plugs, configuration and diagnostic entities excepted.
-const rcMatchPlug = (hass, id) => {
-  const st = hass.states[id];
-  if (!st || !id.startsWith("switch.") || hass.entities?.[id]?.entity_category) return false;
-  return rcIsPlug(st);
-};
-
-const RC_ROOM_ICONS = [
-  [/chambre|bedroom|nursery/i, "mdi:bed-outline"],
-  [/s[ée]jour|salon|living|lounge/i, "mdi:sofa-outline"],
-  [/cuisine|kitchen/i, "mdi:silverware-fork-knife"],
-  [/salle (de )?bains?|bath|douche|shower/i, "mdi:shower-head"],
-  [/toilettes?|wc|toilet/i, "mdi:toilet"],
-  [/entr[ée]e|entrance|hall d.entr|entry/i, "mdi:door"],
-  [/couloir|hall|corridor/i, "mdi:arrow-left-right"],
-  [/bureau|office|study/i, "mdi:desk"],
-  [/garage/i, "mdi:garage"],
-  [/terrasse|jardin|balcon|garden|terrace|balcony|patio|ext[ée]rieur|outdoor/i, "mdi:flower-outline"],
-  [/buanderie|cellier|laundry|utility/i, "mdi:washing-machine"],
-  [/salle [àa] manger|dining/i, "mdi:table-chair"],
-];
-
-// Icon of a room in the overviews: the area's own icon, or one picked from its name.
-const rcRoomIcon = (area) => {
-  if (area.icon) return area.icon;
-  const hit = RC_ROOM_ICONS.find(([re]) => re.test(area.name || area.area_id || ""));
-  return hit ? hit[1] : "mdi:home-outline";
-};
 
 // `fn(hass)` computed once per entity registry: HA replaces hass.entities only when the registry changes,
 // whereas a new hass (and hass.states) comes with every state change of the whole instance.
@@ -102,86 +24,11 @@ const rcPerRegistry = (fn) => {
   };
 };
 
-// The sensor entities of each device, in registry order.
-const rcDeviceSensors = rcPerRegistry((hass) => {
-  const out = {};
-  for (const [id, r] of Object.entries(hass.entities || {})) {
-    if (r.device_id && id.startsWith("sensor.")) (out[r.device_id] ||= []).push(id);
-  }
-  return out;
-});
-
-// Power sensor (device class power, W or kW) of each device; only the device's own sensors are read.
-// Settled per registry like rcDeviceSensors (a device_class next to never changes), except for the devices with a
-// sensor that has no state yet (an integration still loading after a restart): those are looked at again on every
-// call until all their sensors report, so their power sensor is not missed until the next registry change.
-const rcPowerCache = rcPerRegistry((hass) => ({ found: {}, pending: new Set(Object.keys(rcDeviceSensors(hass))) }));
-const rcPowerSensors = (hass) => {
-  const cache = rcPowerCache(hass);
-  if (!cache.pending.size) return cache.found;
-  const sensors = rcDeviceSensors(hass);
-  for (const device of cache.pending) {
-    const ids = sensors[device] || [];
-    const id = ids.find((s) => hass.states[s]?.attributes.device_class === "power");
-    if (id) cache.found[device] = id;
-    if (id || ids.every((s) => hass.states[s])) cache.pending.delete(device);
-  }
-  return cache.found;
-};
-
-const rcWattsOf = (hass, sensorId) => {
-  const st = sensorId && hass.states[sensorId];
-  const v = st ? Number.parseFloat(st.state) : Number.NaN;
-  if (!Number.isFinite(v)) return null;
-  return st.attributes.unit_of_measurement === "kW" ? v * 1000 : v;
-};
-
 // ── Overviews ────────────────────────────────────────────────────────────────
 // Shared by room-overview-card and room-environment-overview-card.
 
-// Visible entities accepted by `match(id)`, with their area, minus the config's `exclude`: the registries are
-// scanned again only when they or the config change.
-const rcByArea = (card, match) => {
-  const h = card._hass;
-  const c = card._config;
-  return rcMemo((card._memo ||= {}), "byArea", [c, h.entities, h.devices], () => {
-    const excluded = new Set(c.exclude || []);
-    const out = [];
-    for (const [id, r] of Object.entries(h.entities || {})) {
-      if (r.hidden || excluded.has(id) || !match(id)) continue;
-      const aid = card._areaOf(id);
-      if (aid) out.push([id, aid]);
-    }
-    return out;
-  });
-};
-
-// Rooms in the order of the config's `rooms` list, then, with `sort: state`, the highest `rank(room)` first,
-// then by name.
-const rcSortRooms = (list, config, rank) => {
-  const order = (config.rooms || []).map((x) => x.area);
-  return list.sort((a, b) => {
-    if (order.length) {
-      const ia = order.indexOf(a.id);
-      const ib = order.indexOf(b.id);
-      if (ia !== ib) return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
-    }
-    return (config.sort === "state" ? rank(b) - rank(a) : 0) || a.name.localeCompare(b.name);
-  });
-};
-
-// The overviews only show the rooms needing a look until their detail button (`zoom`, on by default) is pressed;
-// `zoom: false` shows every room, with no button.
-const rcCompact = (card) => card._config.zoom !== false && !card._zoomed;
-
 // The zoom / detail button: the same icons on the overviews and the mini cards.
 const rcZoomIcon = (card) => (card._zoomed ? "mdi:arrow-collapse" : "mdi:arrow-expand");
-
-// The detail button of an overview header, at its end.
-const rcZoomButton = (card) =>
-  card._config.zoom === false
-    ? ""
-    : `<button class="zoom" title="${rcEsc(card._t(card._zoomed ? "rooms_check" : "rooms_all"))}"><ha-icon icon="${rcZoomIcon(card)}"></ha-icon></button>`;
 
 // Back to the compact view (mini card, or overview showing the rooms needing a look), when zoomed in.
 const rcUnzoom = (card) => {
@@ -240,21 +87,6 @@ const rcZoomClick = (card, ev) => {
   if (ev.detail === 0) card.shadowRoot.querySelector(".zoom")?.focus({ preventScroll: true });
   return true;
 };
-
-// Editor fields shared by the overviews: title, columns and sort.
-const rcOverviewFields = (i18n, lang) => [
-  { name: "title", selector: { text: {} } },
-  { name: "columns", selector: { number: { min: 1, max: 6, mode: "box" } } },
-  {
-    name: "sort",
-    selector: {
-      select: {
-        mode: "dropdown",
-        options: ["name", "state"].map((value) => ({ value, label: rcT(i18n, lang, `ed_sort_${value}`) })),
-      },
-    },
-  },
-];
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 // Strings shared by the cards; a card's own dictionary wins over these.
@@ -2826,8 +2658,6 @@ const rcEsc = (s) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 
-const rcEscRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 // A power in the card's language (*1,2 kW* in French), from `lang` (defaults to the browser's).
 const rcWatts = (w, lang) => {
   const kw = w >= 1000;
@@ -2839,15 +2669,6 @@ const rcWatts = (w, lang) => {
     text = (kw ? w / 1000 : w).toFixed(digits);
   }
   return `${text} ${kw ? "kW" : "W"}`;
-};
-
-// Strips a prefix, a suffix and the area name from an entity name, then capitalises it.
-const rcCleanName = (name, areaName, prefix, suffix) => {
-  let n = (name || "").replace(prefix, "").replace(suffix, "").trim();
-  if (areaName && n.toLowerCase() !== areaName.toLowerCase()) {
-    n = n.replace(new RegExp(`(^${rcEscRe(areaName)}\\s+|\\s+${rcEscRe(areaName)}$)`, "i"), "");
-  }
-  return n.charAt(0).toUpperCase() + n.slice(1);
 };
 
 const rcMoreInfo = (node, entityId) => {
@@ -3245,47 +3066,6 @@ class RcCard extends HTMLElement {
   }
 }
 
-// Lights and plugs: entities that are on or off, a status counting the ones on, an optional "turn everything off".
-// Subclasses set `static headIcons` ([on, off]) and `static emptyKey`, and implement `_sigOf(item)` (what a tile
-// shows) and `_tileOf(item)`; `_statusExtra(lit)` adds to the status.
-class RcToggleCard extends RcCard {
-  _statusExtra() {
-    return "";
-  }
-
-  // What the header shows, on the full card and the mini card: level, icon, status (`ofTotal`: *2/5 on*) and whether
-  // the "turn everything off" button is there. Null when nothing changed, or when the card hides itself.
-  _summary(items, ofTotal = false) {
-    const c = this._config;
-    const lit = items.filter((i) => i.on);
-    const level = lit.length ? "on" : "off";
-    if (!this._changed([ofTotal, items.map((i) => this._sigOf(i))])) return null;
-    if (this._hide(c.hide_when_off && level === "off")) return null;
-
-    const shown = c.only_on ? items.filter((i) => i.on || i.unavailable) : items;
-    this._shown = shown.length;
-    const [onIcon, offIcon] = this.constructor.headIcons;
-    const n = ofTotal ? `${lit.length}/${items.length}` : lit.length;
-    const status = lit.length
-      ? this._t(rcPluralKey(this.constructor.i18n, this._lang(), "on", lit.length), { n })
-      : this._t(items.length ? "all_off" : this.constructor.emptyKey);
-    return {
-      level,
-      shown,
-      icon: lit.length ? onIcon : offIcon,
-      status: status + this._statusExtra(lit),
-      allOff: c.all_off_button && lit.length > 0,
-    };
-  }
-
-  _draw(items) {
-    const s = this._summary(items);
-    if (!s) return;
-    const head = this._head({ ...s, title: this._config.title || this._areaName() || this._t("title") });
-    this._paint(s.level, head, s.shown.map((i) => this._tileOf(i)).join(""));
-  }
-}
-
 // ── Mini cards ───────────────────────────────────────────────────────────────
 // A mini card shows what its full card (`Base`) shows on two lines: the room badge, title and status, then one chip
 // per entity. Its zoom button (top right, `zoom: false` removes it) switches it to the full card and back; a click
@@ -3388,114 +3168,11 @@ const rcMini = (Base, tag, styles, { alertsOnly = false } = {}) =>
     }
   };
 
-// Lights and plugs mini cards: the status counts what is on out of the total (*2/5 on*), with the full card's
-// "turn everything off" button; then a tinted pill (icon and name) for each entity on, its icon alone for the others.
-// The subclass may implement `_chipExtra(item)`, shown after the name (a plug's power draw).
-const rcToggleMini = (Base, tag, styles) =>
-  class extends rcMini(Base, tag, `${RC_TOGGLE_MINI_STYLES}${styles}`) {
-    _chipExtra() {
-      return "";
-    }
-
-    _drawMini(items) {
-      const s = this._summary(items, true);
-      if (!s) return;
-      const chips = s.shown
-        .map((i) => {
-          const cls = i.unavailable ? " na" : i.on ? " on pill" : " off";
-          const style = i.on && i.color ? ` style="--t:${rcEsc(i.color)}"` : "";
-          return `
-          <button class="r${cls}" data-id="${rcEsc(i.id)}"${style} title="${rcEsc(i.name)} — ${rcEsc(i.state)}">
-            <ha-icon icon="${rcEsc(i.icon)}"></ha-icon>${i.on ? `<span>${rcEsc(i.name)}</span>${this._chipExtra(i)}` : ""}
-          </button>`;
-        })
-        .join("");
-      this._paintMini({ level: s.level, icon: s.icon, status: s.status, chips, allOff: s.allOff });
-    }
-  };
-
 // ── Overviews: the open room ─────────────────────────────────────────────────
-// What both overviews share around their room tiles: a tap follows the room's `navigation_path` or unfolds its
-// details in the `.panel` (filled by the subclass's `_fillPanel`, from `_roomGrid`), a click anywhere else folds it
-// back and returns to the rooms needing a look. The subclass implements `_shownRooms()` (the tiles shown) and
-// `_clearPanel()` (drops its detail cards); `_beforeFold()` (optional) runs first on an outside click.
-const rcRoomsPanel = (Base) =>
-  class extends Base {
-    constructor() {
-      super();
-      this._onOutside = (ev) => {
-        if (!rcOutside(this, ev)) return;
-        this._beforeFold?.();
-        if (this._openArea) this._toggle(null);
-        rcUnzoom(this);
-      };
-    }
-
-    // A new config rebuilds the room details, which take part of it (language, exclude, thresholds…).
-    setConfig(config) {
-      this._panelArea = null;
-      super.setConfig(config);
-    }
-
-    connectedCallback() {
-      super.connectedCallback?.();
-      this._outside ??= watchOutside(this, this._onOutside);
-      this._outside.on();
-    }
-
-    disconnectedCallback() {
-      super.disconnectedCallback?.();
-      this._outside?.off();
-      // Left (another dashboard view, a conditional card hidden): folded back as by a click elsewhere, so that the
-      // card does not come back with a room open, zoomed or its popup open.
-      this._beforeFold?.();
-      if (this._openArea) this._toggle(null);
-      rcUnzoom(this);
-    }
-
-    _tap(aid) {
-      const x = this._shownRooms().find((r) => r.id === aid);
-      if (x?.navigation_path) rcNavigate(x.navigation_path);
-      else this._toggle(this._openArea === aid ? null : aid);
-    }
-
-    // Opens a room's details (the render fills the panel), or folds them back.
-    _toggle(aid) {
-      this._openArea = aid;
-      this._panelArea = null;
-      this._sig = null;
-      this._render();
-      if (aid) return;
-      const panel = this.shadowRoot.querySelector(".panel");
-      panel.hidden = true;
-      panel.innerHTML = "";
-      this._clearPanel();
-    }
-  };
 
 // ── Editor ───────────────────────────────────────────────────────────────────
-// Fields shared by the room cards' editors.
-const rcAreaFields = (navigation) => [
-  { name: "area", selector: { area: {} } },
-  { name: "title", selector: { text: {} } },
-  ...(navigation ? [{ name: "navigation_path", selector: { navigation: {} } }] : []),
-  { name: "columns", selector: { number: { min: 1, max: 4, mode: "box" } } },
-];
-// Compact tiles (default) or large ones, the size of Home Assistant's Tile card.
-const rcLayoutField = (i18n, lang) => ({
-  name: "layout",
-  selector: {
-    select: {
-      mode: "dropdown",
-      options: ["compact", "tiles"].map((value) => ({ value, label: rcT(i18n, lang, `ed_layout_${value}`) })),
-    },
-  },
-});
 const rcBooleans = (...names) => names.map((name) => ({ name, selector: { boolean: {} } }));
 
-// "Advanced" section, folded, with the options that are lists or maps (edited as YAML) and the language. Its fields
-// sit at the root of the config (`flatten`).
-const RC_ADVANCED_HELPERS = ["language", "entities", "thresholds", "rooms"];
 const rcAdvanced = (i18n, lang, ...names) => [
   {
     name: "advanced",
@@ -3540,53 +3217,6 @@ const rcAdvanced = (i18n, lang, ...names) => [
     ),
   },
 ];
-// Entity picker limited to `ids`, left out when there is none.
-const rcEntitiesField = (name, ids) =>
-  ids.length ? [{ name, selector: { entity: { multiple: true, include_entities: ids } } }] : [];
-
-// Include list: the entities of the card's domains (narrowed by `card.includeMatch` when set), anywhere in the home,
-// that the card does not show yet (entities already included stay in the list).
-const rcIncludeField = (card, hass, config) => {
-  if (!hass) return [];
-  const shown = new Set(
-    rcProbe(card, hass, { ...config, entities: undefined, include: [] })
-      ._entries()
-      .map((e) => e.entity),
-  );
-  const ids = Object.keys(hass.states).filter(
-    (id) =>
-      card.includeDomains.includes(id.split(".")[0]) &&
-      (!card.includeMatch || card.includeMatch(hass, id)) &&
-      !shown.has(id) &&
-      !hass.entities?.[id]?.hidden &&
-      !hass.entities?.[id]?.entity_category,
-  );
-  for (const e of config?.include || []) {
-    const id = typeof e === "string" ? e : e.entity;
-    if (!ids.includes(id)) ids.push(id);
-  }
-  return rcEntitiesField("include", ids);
-};
-
-// A detached card of class `card`, with `config` over its defaults, to run its discovery from the editor.
-const rcProbe = (card, hass, config) => {
-  const probe = document.createElement(card.tag);
-  probe._hass = hass;
-  probe._config = { ...card.defaults, ...config };
-  return probe;
-};
-
-// Exclude list limited to what the card finds in the chosen room, with the card's own rules
-// (entities already excluded stay in the list).
-const rcExcludeField = (card, hass, config) => {
-  const ids =
-    hass && config?.area
-      ? rcProbe(card, hass, { ...config, entities: undefined, exclude: [] })
-          ._entries()
-          .map((e) => e.entity)
-      : [];
-  return rcEntitiesField("exclude", ids);
-};
 
 // `schema(lang, hass, config)` lists the fields; options left at the card's default are not written to the YAML
 // (list defaults such as `exclude: []` are not shown in the form: an empty list is never written anyway).
@@ -3791,68 +3421,6 @@ const RC_ZOOM_STYLES = `
   .zoom ha-icon { --mdc-icon-size: 16px; }
   .zoom:hover { background: color-mix(in srgb, var(--rc-idle) 16%, transparent); color: var(--primary-text-color); }
   .zoom:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
-`;
-
-// Lights and plugs mini cards: the "turn everything off" status (not filled: tinted on hover, like the zoom button)
-// and the chips of the entities that are off (icon alone, grey).
-const RC_TOGGLE_MINI_STYLES = `
-  .st.action { all: unset; flex: 0 1 auto; min-width: 0; box-sizing: border-box; position: relative; cursor: pointer;
-               display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 1px 6px; border-radius: 999px;
-               font-size: 11px; font-weight: 500; color: var(--c); }
-  .st.action ha-icon { --mdc-icon-size: 12px; flex: none; }
-  .st.action:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
-  .st.action:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
-  @container (max-width: 200px) {
-    .st.action { width: auto; height: auto; padding: 1px 4px; }
-    .st.action::before { content: none; }
-  }
-  .r.off, .r.na { padding: 0 3px; }
-  .r.off ha-icon, .r.na ha-icon { margin-right: 0; }
-  .r.off { --t: var(--rc-idle); }
-  .r.na  { --t: var(--rc-na); opacity: .7; }
-  .r small { flex: none; font-size: 10px; font-weight: 400; opacity: .8; margin-left: 4px; }
-`;
-
-// The overviews' room grid: the tiles, their icon, chips row, empty state and details panel. Each overview sets the
-// tile's default tint and its own levels (`.room { --t: … }`, `.room.lvl-…`), the chips' spacing and the panel extras.
-const RC_ROOM_GRID_STYLES = `
-  .grid { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
-  @container (max-width: 340px) { .grid:not(.fixed) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  /* A card this narrow (6 columns of the Sections view on a phone): one room per row, whatever the columns option. Two
-     left the name a letter or two ("B…") and pushed a chip out of its tile. */
-  @container (max-width: 260px) { .grid.grid { grid-template-columns: minmax(0, 1fr); } }
-  .grid[hidden] { display: none; }
-  .room { all: unset; box-sizing: border-box; cursor: pointer; min-width: 0;
-          display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: "ic name" "ic state" "chips chips";
-          column-gap: 7px; align-items: center; align-content: start; padding: 6px 7px; border-radius: 10px;
-          background: var(--secondary-background-color, transparent); border: 1px solid transparent;
-          transition: background .2s, border-color .2s; }
-  .room.lvl-warn, .room.lvl-alert {
-    background: color-mix(in srgb, var(--t) 9%, var(--secondary-background-color, transparent));
-    border-color: color-mix(in srgb, var(--t) 22%, transparent); }
-  .room:hover { background: color-mix(in srgb, var(--t) 13%, var(--secondary-background-color, transparent)); }
-  .room:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
-  .room.sel { border-color: color-mix(in srgb, var(--primary-color) 55%, transparent); }
-  .room .ic { grid-area: ic; align-self: start; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-              color: var(--t); background: color-mix(in srgb, var(--t) 16%, transparent); }
-  .room.lvl-ok .ic { color: var(--primary-text-color); background: color-mix(in srgb, var(--rc-idle) 14%, transparent); }
-  .room .ic ha-icon { --mdc-icon-size: 15px; }
-  .room .name { grid-area: name; }
-  /* The state (a sentence: "Water leak", "Too humid +1") wraps between its words only; a word too long for its line
-     ends with "…" rather than being broken ("Pr|es|en|ce"). */
-  .room .state { grid-area: state; overflow-wrap: normal; overflow: hidden; text-overflow: ellipsis; }
-  .room:not(.lvl-ok) .state { color: color-mix(in srgb, var(--t) 50%, var(--primary-text-color, #212121)); }
-  .chips { grid-area: chips; display: flex; flex-wrap: wrap; }
-  .chips:empty { display: none; }
-  .empty { grid-column: 1 / -1; padding: 12px; text-align: center; font-size: 13px; color: var(--secondary-text-color); }
-  .panel { margin-top: 8px; border-radius: 12px; overflow: hidden; background: var(--secondary-background-color, transparent);
-           --ha-card-background: transparent; --card-background-color: transparent;
-           --ha-card-box-shadow: none; --ha-card-border-width: 0; }
-  .panel[hidden] { display: none; }
-  /* The unfolded room cards are custom elements with no display of their own: inline, the separator between them
-     (border-top) would only paint on an empty first line box around their block <ha-card>. */
-  .panel > * { display: block; }
-  @media (prefers-reduced-motion: reduce) { .room { animation: none; transition: none; } }
 `;
 
 const RC_MINI_STYLES = `${RC_ZOOM_STYLES}

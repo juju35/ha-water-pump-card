@@ -499,7 +499,6 @@ class WaterPumpCard extends RcCard {
     .gauge { position: relative; flex: none; width: 44px; height: 140px; border-radius: 12px; overflow: hidden;
              background: var(--secondary-background-color, rgba(127,127,127,.12)); }
     .gauge .wt { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, #7fbcf0, #2b8be6); transition: height .4s ease; }
-    .lvl-alert .gauge .wt { background: linear-gradient(180deg, #7fbcf0, #2b8be6); }
     .gauge .mk { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid rgba(255,255,255,.9); }
     .gauge .mk.al { border-top: 2px dashed var(--rc-alert); }
     .lbs { flex: none; display: flex; flex-direction: column; justify-content: space-around; padding: 6px 0; font-size: 11px; color: var(--secondary-text-color); }
