@@ -653,8 +653,10 @@ rcRegister(
 // The pump on its banner: the state as the status pill, the level and the run as chips (the alerts first); the zoom
 // button opens the full card in place.
 class WaterPumpMiniCard extends rcMini(WaterPumpCard, "water-pump-mini-card", ".r { --t: var(--c); } .r.dim { --t: var(--rc-idle); }") {
+  // Compact: the 90px banner is about two rows of 50px (one without it), for the masonry view.
   getCardSize() {
-    return this._zoomed ? super.getCardSize() : 1;
+    if (this._zoomed) return super.getCardSize();
+    return this._config?.illustration === false ? 1 : 2;
   }
 
   _drawMini(m) {
