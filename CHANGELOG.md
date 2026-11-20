@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.3 - 2026-11-20
+
+### Fixes
+- The minute refresh (running for, last run, the 24-hour strip) now also runs in browsers without `ResizeObserver`.
+- README: the options table gets a *Card* column (`both` / `mini`), and a Support section.
+
+### Performance
+- About 420 lines of unused code copied from the room cards (rooms, lights, plugs, toggle mini card, rooms panel and their styles) are gone from the bundle.
+
+### Maintenance
+- The commitlint config loads as an ES module: the `commit-msg` hook failed on every commit.
+
 ## 1.0.2 - 2026-11-18
 
 ### Maintenance
