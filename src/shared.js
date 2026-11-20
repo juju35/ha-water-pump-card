@@ -7,88 +7,10 @@
 const RC_VERSION = "__VERSION__";
 
 // ── Discovery rules ──────────────────────────────────────────────────────────
-const RC_OPENING_CLASSES = ["moisture", "smoke", "carbon_monoxide", "gas", "door", "window", "opening", "garage_door"];
-// Safety sensors: an active state is an alarm, not an opening. Most serious first: it names the room's status.
-const RC_ALERT_KINDS = {
-  smoke: { dc: "smoke", on: "mdi:smoke-detector-alert", off: "mdi:smoke-detector" },
-  co: { dc: "carbon_monoxide", on: "mdi:molecule-co", off: "mdi:molecule-co" },
-  gas: { dc: "gas", on: "mdi:gas-cylinder", off: "mdi:gas-cylinder" },
-  leak: { dc: "moisture", on: "mdi:water-alert", off: "mdi:water-check" },
-};
-const RC_ALERT_ORDER = Object.keys(RC_ALERT_KINDS);
-// Alert kind of a device class (`leak`, `smoke`, `co`, `gas`), or undefined for any other class.
-const rcAlertKind = (dc) => RC_ALERT_ORDER.find((k) => RC_ALERT_KINDS[k].dc === dc);
-// The most serious alert kind among `kinds`, `leak` when none is known.
-const rcTopAlert = (kinds) => RC_ALERT_ORDER.find((k) => kinds.includes(k)) || "leak";
-const RC_PRESENCE_CLASSES = ["occupancy", "presence", "motion"];
-// A switch driving a light belongs to the lights card, a switch that is a plug to the plugs card.
-const RC_LIGHT_NAME = /(^|\s)(lumi[eè]re|lampe|lamp|light|veilleuse|guirlande)(\s|$)/i;
-const RC_PLUG_NAME = /(^|\s)(prise|multiprise|plug|outlet|socket)(\s|$)/i;
 const RC_HOLD_MS = 500;
 const RC_MOVE_PX = 8;
 // A held arrow key repeats some 30 times a second: one brightness step every RC_REPEAT_MS at most.
 const RC_REPEAT_MS = 150;
-
-const rcIsLightSwitch = (st) => RC_LIGHT_NAME.test(st.attributes.friendly_name || "");
-const rcIsPlug = (st) =>
-  !rcIsLightSwitch(st) && (st.attributes.device_class === "outlet" || RC_PLUG_NAME.test(st.attributes.friendly_name || ""));
-
-// What each room card shows, shared with the Overview so that both count the same entities.
-// Detections that are not about people, which cameras report as motion: pets never count, vehicles only outdoors.
-const RC_PET = /(^|[\s_.-])(pets?|animals?|animaux|chiens?|chats?|dogs?|cats?)($|[\s_-])/i;
-const RC_VEHICLE = /(^|[\s_.-])(vehicles?|v[ée]hicules?|voitures?|cars?)($|[\s_-])/i;
-// An outdoor room, from its name: garden, terrace, balcony, patio, yard, driveway, porch, gate, parking…
-const RC_OUTDOOR =
-  /jardin|terrasse|balcon|patio|ext[ée]rieur|cour(\s|$)|all[ée]e|porche|portail|parking|garden|terrace|balcony|outdoor|outside|yard|driveway|porch|gate/i;
-const rcIsOutdoor = (area) => !!area && RC_OUTDOOR.test(`${area.name || ""} ${area.area_id || ""}`);
-
-// Sensors card: leak, door, window and opening sensors, plus presence and motion unless `presence` is false. Camera
-// detections count, except pets, and vehicles outside an `outdoor` room.
-const rcMatchSensor = (hass, id, { presence = true, outdoor = false } = {}) => {
-  if (!id.startsWith("binary_sensor.")) return false;
-  const st = hass.states[id];
-  const dc = st?.attributes.device_class;
-  if (RC_OPENING_CLASSES.includes(dc)) return true;
-  if (presence === false || !RC_PRESENCE_CLASSES.includes(dc)) return false;
-  const name = `${id} ${st.attributes.friendly_name || ""}`;
-  if (RC_PET.test(name)) return false;
-  return outdoor || !RC_VEHICLE.test(name);
-};
-// Lights card: lights (groups excepted) and switches driving a light, configuration and diagnostic entities excepted.
-const rcMatchLight = (hass, id) => {
-  const st = hass.states[id];
-  if (!st || hass.entities?.[id]?.entity_category) return false;
-  if (id.startsWith("light.")) return !Array.isArray(st.attributes.entity_id);
-  return id.startsWith("switch.") && rcIsLightSwitch(st);
-};
-// Plugs card: switches that are plugs, configuration and diagnostic entities excepted.
-const rcMatchPlug = (hass, id) => {
-  const st = hass.states[id];
-  if (!st || !id.startsWith("switch.") || hass.entities?.[id]?.entity_category) return false;
-  return rcIsPlug(st);
-};
-
-const RC_ROOM_ICONS = [
-  [/chambre|bedroom|nursery/i, "mdi:bed-outline"],
-  [/s[ée]jour|salon|living|lounge/i, "mdi:sofa-outline"],
-  [/cuisine|kitchen/i, "mdi:silverware-fork-knife"],
-  [/salle (de )?bains?|bath|douche|shower/i, "mdi:shower-head"],
-  [/toilettes?|wc|toilet/i, "mdi:toilet"],
-  [/entr[ée]e|entrance|hall d.entr|entry/i, "mdi:door"],
-  [/couloir|hall|corridor/i, "mdi:arrow-left-right"],
-  [/bureau|office|study/i, "mdi:desk"],
-  [/garage/i, "mdi:garage"],
-  [/terrasse|jardin|balcon|garden|terrace|balcony|patio|ext[ée]rieur|outdoor/i, "mdi:flower-outline"],
-  [/buanderie|cellier|laundry|utility/i, "mdi:washing-machine"],
-  [/salle [àa] manger|dining/i, "mdi:table-chair"],
-];
-
-// Icon of a room in the overviews: the area's own icon, or one picked from its name.
-const rcRoomIcon = (area) => {
-  if (area.icon) return area.icon;
-  const hit = RC_ROOM_ICONS.find(([re]) => re.test(area.name || area.area_id || ""));
-  return hit ? hit[1] : "mdi:home-outline";
-};
 
 // `fn(hass)` computed once per entity registry: HA replaces hass.entities only when the registry changes,
 // whereas a new hass (and hass.states) comes with every state change of the whole instance.
@@ -102,86 +24,11 @@ const rcPerRegistry = (fn) => {
   };
 };
 
-// The sensor entities of each device, in registry order.
-const rcDeviceSensors = rcPerRegistry((hass) => {
-  const out = {};
-  for (const [id, r] of Object.entries(hass.entities || {})) {
-    if (r.device_id && id.startsWith("sensor.")) (out[r.device_id] ||= []).push(id);
-  }
-  return out;
-});
-
-// Power sensor (device class power, W or kW) of each device; only the device's own sensors are read.
-// Settled per registry like rcDeviceSensors (a device_class next to never changes), except for the devices with a
-// sensor that has no state yet (an integration still loading after a restart): those are looked at again on every
-// call until all their sensors report, so their power sensor is not missed until the next registry change.
-const rcPowerCache = rcPerRegistry((hass) => ({ found: {}, pending: new Set(Object.keys(rcDeviceSensors(hass))) }));
-const rcPowerSensors = (hass) => {
-  const cache = rcPowerCache(hass);
-  if (!cache.pending.size) return cache.found;
-  const sensors = rcDeviceSensors(hass);
-  for (const device of cache.pending) {
-    const ids = sensors[device] || [];
-    const id = ids.find((s) => hass.states[s]?.attributes.device_class === "power");
-    if (id) cache.found[device] = id;
-    if (id || ids.every((s) => hass.states[s])) cache.pending.delete(device);
-  }
-  return cache.found;
-};
-
-const rcWattsOf = (hass, sensorId) => {
-  const st = sensorId && hass.states[sensorId];
-  const v = st ? Number.parseFloat(st.state) : Number.NaN;
-  if (!Number.isFinite(v)) return null;
-  return st.attributes.unit_of_measurement === "kW" ? v * 1000 : v;
-};
-
 // ── Overviews ────────────────────────────────────────────────────────────────
 // Shared by room-overview-card and room-environment-overview-card.
 
-// Visible entities accepted by `match(id)`, with their area, minus the config's `exclude`: the registries are
-// scanned again only when they or the config change.
-const rcByArea = (card, match) => {
-  const h = card._hass;
-  const c = card._config;
-  return rcMemo((card._memo ||= {}), "byArea", [c, h.entities, h.devices], () => {
-    const excluded = new Set(c.exclude || []);
-    const out = [];
-    for (const [id, r] of Object.entries(h.entities || {})) {
-      if (r.hidden || excluded.has(id) || !match(id)) continue;
-      const aid = card._areaOf(id);
-      if (aid) out.push([id, aid]);
-    }
-    return out;
-  });
-};
-
-// Rooms in the order of the config's `rooms` list, then, with `sort: state`, the highest `rank(room)` first,
-// then by name.
-const rcSortRooms = (list, config, rank) => {
-  const order = (config.rooms || []).map((x) => x.area);
-  return list.sort((a, b) => {
-    if (order.length) {
-      const ia = order.indexOf(a.id);
-      const ib = order.indexOf(b.id);
-      if (ia !== ib) return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
-    }
-    return (config.sort === "state" ? rank(b) - rank(a) : 0) || a.name.localeCompare(b.name);
-  });
-};
-
-// The overviews only show the rooms needing a look until their detail button (`zoom`, on by default) is pressed;
-// `zoom: false` shows every room, with no button.
-const rcCompact = (card) => card._config.zoom !== false && !card._zoomed;
-
 // The zoom / detail button: the same icons on the overviews and the mini cards.
 const rcZoomIcon = (card) => (card._zoomed ? "mdi:arrow-collapse" : "mdi:arrow-expand");
-
-// The detail button of an overview header, at its end.
-const rcZoomButton = (card) =>
-  card._config.zoom === false
-    ? ""
-    : `<button class="zoom" title="${rcEsc(card._t(card._zoomed ? "rooms_check" : "rooms_all"))}"><ha-icon icon="${rcZoomIcon(card)}"></ha-icon></button>`;
 
 // Back to the compact view (mini card, or overview showing the rooms needing a look), when zoomed in.
 const rcUnzoom = (card) => {
@@ -241,21 +88,6 @@ const rcZoomClick = (card, ev) => {
   return true;
 };
 
-// Editor fields shared by the overviews: title, columns and sort.
-const rcOverviewFields = (i18n, lang) => [
-  { name: "title", selector: { text: {} } },
-  { name: "columns", selector: { number: { min: 1, max: 6, mode: "box" } } },
-  {
-    name: "sort",
-    selector: {
-      select: {
-        mode: "dropdown",
-        options: ["name", "state"].map((value) => ({ value, label: rcT(i18n, lang, `ed_sort_${value}`) })),
-      },
-    },
-  },
-];
-
 // ── i18n ─────────────────────────────────────────────────────────────────────
 // Strings shared by the cards; a card's own dictionary wins over these.
 const RC_I18N = {
@@ -276,37 +108,18 @@ const RC_I18N = {
     on: "On",
     off: "Off",
     turn_all_off: "Turn everything off",
-    ed_area: "Area",
     ed_title: "Title",
     ed_show_title: "Show title",
-    ed_title_helper: "Leave empty for the area name",
-    ed_columns: "Columns",
-    ed_layout: "Layout",
-    ed_layout_helper: "Tiles: one large tile per entity, like the Tile card, easier to tap on a phone",
-    ed_layout_compact: "Compact",
-    ed_layout_tiles: "Tiles",
     ed_advanced: "Advanced",
     ed_language: "Language",
     ed_language_helper: "Empty: the Home Assistant language",
     ed_language_auto: "Automatic",
-    ed_entities: "Explicit entities (YAML)",
-    ed_entities_helper: "Replaces the automatic discovery: entity IDs, or {entity, name, icon}",
-    ed_thresholds: "Comfort thresholds (YAML)",
-    ed_thresholds_helper: "Per kind, in the sensor's unit, e.g. co2: [800, 1200] or humidity: [25, 35, 70, 80]",
-    ed_rooms: "Rooms (YAML)",
-    ed_rooms_helper: "Order and overrides: a list of {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigation path",
-    ed_all_off_button: "“Turn everything off” button",
     err_config: "Set `area` or `entities`",
     zoom_in: "Show the full card",
     zoom_out: "Back to the compact view",
     ed_zoom: "Zoom button",
     ed_zoom_helper: "Switches the mini card to the full card and back",
-    rooms_all: "Show every room",
-    rooms_check: "Only the rooms needing a look",
-    ed_sort: "Sort",
-    ed_sort_name: "By name",
-    ed_exclude_areas: "Rooms to exclude",
   },
   fr: {
     all_closed: "Tout est fermé",
@@ -325,37 +138,18 @@ const RC_I18N = {
     on: "Allumée",
     off: "Éteinte",
     turn_all_off: "Tout éteindre",
-    ed_area: "Pièce",
     ed_title: "Titre",
     ed_show_title: "Afficher le titre",
-    ed_title_helper: "Laisser vide pour le nom de la pièce",
-    ed_columns: "Colonnes",
-    ed_layout: "Disposition",
-    ed_layout_helper: "Tuiles : une grande tuile par entité, comme la carte Tuile, plus facile à toucher sur téléphone",
-    ed_layout_compact: "Compacte",
-    ed_layout_tiles: "Tuiles",
     ed_advanced: "Avancé",
     ed_language: "Langue",
     ed_language_helper: "Vide : la langue de Home Assistant",
     ed_language_auto: "Automatique",
-    ed_entities: "Entités explicites (YAML)",
-    ed_entities_helper: "Remplace la découverte automatique : des identifiants d'entités, ou {entity, name, icon}",
-    ed_thresholds: "Seuils de confort (YAML)",
-    ed_thresholds_helper: "Par type, dans l'unité du capteur, par exemple co2: [800, 1200] ou humidity: [25, 35, 70, 80]",
-    ed_rooms: "Pièces (YAML)",
-    ed_rooms_helper: "Ordre et personnalisation : une liste de {area, name, icon, navigation_path}",
     ed_navigation_path: "Chemin de navigation",
-    ed_all_off_button: "Bouton « Tout éteindre »",
     err_config: "Définis `area` ou `entities`",
     zoom_in: "Afficher la carte complète",
     zoom_out: "Revenir à la vue compacte",
     ed_zoom: "Bouton zoom",
     ed_zoom_helper: "Bascule la mini-carte en carte complète, et inversement",
-    rooms_all: "Afficher toutes les pièces",
-    rooms_check: "Seulement les pièces à surveiller",
-    ed_sort: "Tri",
-    ed_sort_name: "Par nom",
-    ed_exclude_areas: "Pièces à exclure",
   },
   de: {
     all_closed: "Alles geschlossen",
@@ -374,37 +168,18 @@ const RC_I18N = {
     on: "An",
     off: "Aus",
     turn_all_off: "Alles ausschalten",
-    ed_area: "Bereich",
     ed_title: "Titel",
     ed_show_title: "Titel anzeigen",
-    ed_title_helper: "Leer lassen für den Namen des Bereichs",
-    ed_columns: "Spalten",
-    ed_layout: "Layout",
-    ed_layout_helper: "Kacheln: eine große Kachel pro Entität wie die Kachel-Karte, auf dem Handy leichter anzutippen",
-    ed_layout_compact: "Kompakt",
-    ed_layout_tiles: "Kacheln",
     ed_advanced: "Erweitert",
     ed_language: "Sprache",
     ed_language_helper: "Leer: die Sprache von Home Assistant",
     ed_language_auto: "Automatisch",
-    ed_entities: "Explizite Entitäten (YAML)",
-    ed_entities_helper: "Ersetzt die automatische Erkennung: Entitäts-IDs oder {entity, name, icon}",
-    ed_thresholds: "Komfortschwellen (YAML)",
-    ed_thresholds_helper: "Pro Art, in der Einheit des Sensors, z. B. co2: [800, 1200] oder humidity: [25, 35, 70, 80]",
-    ed_rooms: "Räume (YAML)",
-    ed_rooms_helper: "Reihenfolge und Anpassungen: eine Liste von {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigationspfad",
-    ed_all_off_button: "Schaltfläche „Alles ausschalten“",
     err_config: "Lege `area` oder `entities` fest",
     zoom_in: "Vollständige Karte anzeigen",
     zoom_out: "Zurück zur kompakten Ansicht",
     ed_zoom: "Zoom-Schaltfläche",
     ed_zoom_helper: "Wechselt von der Mini-Karte zur vollständigen Karte und zurück",
-    rooms_all: "Alle Räume anzeigen",
-    rooms_check: "Nur die Räume, die Aufmerksamkeit brauchen",
-    ed_sort: "Sortierung",
-    ed_sort_name: "Nach Name",
-    ed_exclude_areas: "Auszuschließende Räume",
   },
   es: {
     all_closed: "Todo cerrado",
@@ -423,37 +198,18 @@ const RC_I18N = {
     on: "Encendido",
     off: "Apagado",
     turn_all_off: "Apagar todo",
-    ed_area: "Área",
     ed_title: "Título",
     ed_show_title: "Mostrar el título",
-    ed_title_helper: "Déjalo vacío para usar el nombre del área",
-    ed_columns: "Columnas",
-    ed_layout: "Diseño",
-    ed_layout_helper: "Mosaicos: un mosaico grande por entidad, como la tarjeta Mosaico, más fácil de tocar en el móvil",
-    ed_layout_compact: "Compacto",
-    ed_layout_tiles: "Mosaicos",
     ed_advanced: "Avanzado",
     ed_language: "Idioma",
     ed_language_helper: "Vacío: el idioma de Home Assistant",
     ed_language_auto: "Automático",
-    ed_entities: "Entidades explícitas (YAML)",
-    ed_entities_helper: "Sustituye la detección automática: IDs de entidad, o {entity, name, icon}",
-    ed_thresholds: "Umbrales de confort (YAML)",
-    ed_thresholds_helper: "Por tipo, en la unidad del sensor, p. ej. co2: [800, 1200] o humidity: [25, 35, 70, 80]",
-    ed_rooms: "Habitaciones (YAML)",
-    ed_rooms_helper: "Orden y personalización: una lista de {area, name, icon, navigation_path}",
     ed_navigation_path: "Ruta de navegación",
-    ed_all_off_button: "Botón «Apagar todo»",
     err_config: "Define `area` o `entities`",
     zoom_in: "Mostrar la tarjeta completa",
     zoom_out: "Volver a la vista compacta",
     ed_zoom: "Botón de zoom",
     ed_zoom_helper: "Cambia de la minitarjeta a la tarjeta completa y viceversa",
-    rooms_all: "Mostrar todas las habitaciones",
-    rooms_check: "Solo las habitaciones que requieren atención",
-    ed_sort: "Orden",
-    ed_sort_name: "Por nombre",
-    ed_exclude_areas: "Habitaciones a excluir",
   },
   sr: {
     all_closed: "Све је затворено",
@@ -473,37 +229,18 @@ const RC_I18N = {
     on: "Укључено",
     off: "Искључено",
     turn_all_off: "Искључи све",
-    ed_area: "Просторија",
     ed_title: "Наслов",
     ed_show_title: "Прикажи наслов",
-    ed_title_helper: "Остави празно за назив просторије",
-    ed_columns: "Колоне",
-    ed_layout: "Распоред",
-    ed_layout_helper: "Плочице: једна велика плочица по ентитету, као картица Плочица, лакше за додир на телефону",
-    ed_layout_compact: "Збијено",
-    ed_layout_tiles: "Плочице",
     ed_advanced: "Напредно",
     ed_language: "Језик",
     ed_language_helper: "Празно: језик Home Assistant-а",
     ed_language_auto: "Аутоматски",
-    ed_entities: "Експлицитни ентитети (YAML)",
-    ed_entities_helper: "Замењује аутоматско проналажење: ID-ови ентитета или {entity, name, icon}",
-    ed_thresholds: "Прагови комфора (YAML)",
-    ed_thresholds_helper: "По врсти, у јединици сензора, нпр. co2: [800, 1200] или humidity: [25, 35, 70, 80]",
-    ed_rooms: "Собе/Просторије (YAML)",
-    ed_rooms_helper: "Редослед и измене: листа са {area, name, icon, navigation_path}",
     ed_navigation_path: "Путања за навигацију",
-    ed_all_off_button: "Дугме „Искључи све“",
     err_config: "Подесите `area` или `entities`",
     zoom_in: "Прикажи целу картицу",
     zoom_out: "Назад на компактни приказ",
     ed_zoom: "Дугме за увећање",
     ed_zoom_helper: "Пребацује мини картицу на пун приказ и назад",
-    rooms_all: "Прикажи сваку собу",
-    rooms_check: "Само собе које захтевају пажњу",
-    ed_sort: "Сортирање",
-    ed_sort_name: "По имену",
-    ed_exclude_areas: "Изостави собе",
   },
   "sr-Latn": {
     all_closed: "Sve je zatvoreno",
@@ -523,37 +260,18 @@ const RC_I18N = {
     on: "Uključeno",
     off: "Isključeno",
     turn_all_off: "Isključi sve",
-    ed_area: "Prostorija",
     ed_title: "Naslov",
     ed_show_title: "Prikaži naslov",
-    ed_title_helper: "Ostavi prazno za naziv prostorije",
-    ed_columns: "Kolone",
-    ed_layout: "Raspored",
-    ed_layout_helper: "Pločice: jedna velika pločica po entitetu, kao kartica Pločica, lakše za dodir na telefonu",
-    ed_layout_compact: "Zbijeno",
-    ed_layout_tiles: "Pločice",
     ed_advanced: "Napredno",
     ed_language: "Jezik",
     ed_language_helper: "Prazno: jezik Home Assistant-a",
     ed_language_auto: "Automatski",
-    ed_entities: "Eksplicitni entiteti (YAML)",
-    ed_entities_helper: "Zamenjuje automatsko pronalaženje: ID-ovi entiteta ili {entity, name, icon}",
-    ed_thresholds: "Pragovi komfora (YAML)",
-    ed_thresholds_helper: "Po vrsti, u jedinici senzora, npr. co2: [800, 1200] ili humidity: [25, 35, 70, 80]",
-    ed_rooms: "Sobe/Prostorije (YAML)",
-    ed_rooms_helper: "Redosled i izmene: lista sa {area, name, icon, navigation_path}",
     ed_navigation_path: "Putanja za navigaciju",
-    ed_all_off_button: "Dugme „Isključi sve“",
     err_config: "Podesite `area` ili `entities`",
     zoom_in: "Prikaži celu karticu",
     zoom_out: "Nazad na kompaktni prikaz",
     ed_zoom: "Dugme za uvećanje",
     ed_zoom_helper: "Prebacuje mini karticu na pun prikaz i nazad",
-    rooms_all: "Prikaži svaku sobu",
-    rooms_check: "Samo sobe koje zahtevaju pažnju",
-    ed_sort: "Sortiranje",
-    ed_sort_name: "Po imenu",
-    ed_exclude_areas: "Izostavi sobe",
   },
   it: {
     all_closed: "Tutto chiuso",
@@ -572,37 +290,18 @@ const RC_I18N = {
     on: "Accesa",
     off: "Spenta",
     turn_all_off: "Spegni tutto",
-    ed_area: "Area",
     ed_title: "Titolo",
     ed_show_title: "Mostra il titolo",
-    ed_title_helper: "Lascia vuoto per usare il nome dell'area",
-    ed_columns: "Colonne",
-    ed_layout: "Layout",
-    ed_layout_helper: "Riquadri: un riquadro grande per entità, come la scheda Riquadro, più facile da toccare sul telefono",
-    ed_layout_compact: "Compatto",
-    ed_layout_tiles: "Riquadri",
     ed_advanced: "Avanzate",
     ed_language: "Lingua",
     ed_language_helper: "Vuoto: la lingua di Home Assistant",
     ed_language_auto: "Automatica",
-    ed_entities: "Entità esplicite (YAML)",
-    ed_entities_helper: "Sostituisce il rilevamento automatico: ID entità o {entity, name, icon}",
-    ed_thresholds: "Soglie di comfort (YAML)",
-    ed_thresholds_helper: "Per tipo, nell'unità del sensore, ad es. co2: [800, 1200] o humidity: [25, 35, 70, 80]",
-    ed_rooms: "Stanze (YAML)",
-    ed_rooms_helper: "Ordine e personalizzazioni: un elenco di {area, name, icon, navigation_path}",
     ed_navigation_path: "Percorso di navigazione",
-    ed_all_off_button: "Pulsante «Spegni tutto»",
     err_config: "Imposta `area` o `entities`",
     zoom_in: "Mostra la scheda completa",
     zoom_out: "Torna alla vista compatta",
     ed_zoom: "Pulsante zoom",
     ed_zoom_helper: "Passa dalla mini scheda alla scheda completa e viceversa",
-    rooms_all: "Mostra tutte le stanze",
-    rooms_check: "Solo le stanze da controllare",
-    ed_sort: "Ordinamento",
-    ed_sort_name: "Per nome",
-    ed_exclude_areas: "Stanze da escludere",
   },
   nl: {
     all_closed: "Alles dicht",
@@ -621,37 +320,18 @@ const RC_I18N = {
     on: "Aan",
     off: "Uit",
     turn_all_off: "Alles uitschakelen",
-    ed_area: "Ruimte",
     ed_title: "Titel",
     ed_show_title: "Titel tonen",
-    ed_title_helper: "Leeg laten voor de naam van de ruimte",
-    ed_columns: "Kolommen",
-    ed_layout: "Indeling",
-    ed_layout_helper: "Tegels: één grote tegel per entiteit, zoals de Tegel-kaart, makkelijker aan te tikken op een telefoon",
-    ed_layout_compact: "Compact",
-    ed_layout_tiles: "Tegels",
     ed_advanced: "Geavanceerd",
     ed_language: "Taal",
     ed_language_helper: "Leeg: de taal van Home Assistant",
     ed_language_auto: "Automatisch",
-    ed_entities: "Expliciete entiteiten (YAML)",
-    ed_entities_helper: "Vervangt de automatische detectie: entiteit-ID's of {entity, name, icon}",
-    ed_thresholds: "Comfortdrempels (YAML)",
-    ed_thresholds_helper: "Per soort, in de eenheid van de sensor, bijv. co2: [800, 1200] of humidity: [25, 35, 70, 80]",
-    ed_rooms: "Ruimtes (YAML)",
-    ed_rooms_helper: "Volgorde en aanpassingen: een lijst van {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigatiepad",
-    ed_all_off_button: "Knop “Alles uitschakelen”",
     err_config: "Stel `area` of `entities` in",
     zoom_in: "Volledige kaart tonen",
     zoom_out: "Terug naar de compacte weergave",
     ed_zoom: "Zoomknop",
     ed_zoom_helper: "Schakelt de minikaart naar de volledige kaart en terug",
-    rooms_all: "Alle ruimtes tonen",
-    rooms_check: "Alleen de ruimtes die aandacht nodig hebben",
-    ed_sort: "Sortering",
-    ed_sort_name: "Op naam",
-    ed_exclude_areas: "Uit te sluiten ruimtes",
   },
   pt: {
     all_closed: "Tudo fechado",
@@ -670,37 +350,18 @@ const RC_I18N = {
     on: "Ligada",
     off: "Desligada",
     turn_all_off: "Desligar tudo",
-    ed_area: "Área",
     ed_title: "Título",
     ed_show_title: "Mostrar o título",
-    ed_title_helper: "Deixe vazio para usar o nome da área",
-    ed_columns: "Colunas",
-    ed_layout: "Disposição",
-    ed_layout_helper: "Mosaicos: um mosaico grande por entidade, como o cartão Mosaico, mais fácil de tocar no telemóvel",
-    ed_layout_compact: "Compacta",
-    ed_layout_tiles: "Mosaicos",
     ed_advanced: "Avançado",
     ed_language: "Idioma",
     ed_language_helper: "Vazio: o idioma do Home Assistant",
     ed_language_auto: "Automático",
-    ed_entities: "Entidades explícitas (YAML)",
-    ed_entities_helper: "Substitui a deteção automática: IDs de entidade, ou {entity, name, icon}",
-    ed_thresholds: "Limiares de conforto (YAML)",
-    ed_thresholds_helper: "Por tipo, na unidade do sensor, p. ex. co2: [800, 1200] ou humidity: [25, 35, 70, 80]",
-    ed_rooms: "Divisões (YAML)",
-    ed_rooms_helper: "Ordem e personalização: uma lista de {area, name, icon, navigation_path}",
     ed_navigation_path: "Caminho de navegação",
-    ed_all_off_button: "Botão «Desligar tudo»",
     err_config: "Defina `area` ou `entities`",
     zoom_in: "Mostrar o cartão completo",
     zoom_out: "Voltar à vista compacta",
     ed_zoom: "Botão de zoom",
     ed_zoom_helper: "Alterna entre o minicartão e o cartão completo",
-    rooms_all: "Mostrar todas as divisões",
-    rooms_check: "Só as divisões que precisam de atenção",
-    ed_sort: "Ordenação",
-    ed_sort_name: "Por nome",
-    ed_exclude_areas: "Divisões a excluir",
   },
   pl: {
     all_closed: "Zamknięte",
@@ -719,37 +380,18 @@ const RC_I18N = {
     on: "Włączone",
     off: "Wyłączone",
     turn_all_off: "Wyłącz wszystko",
-    ed_area: "Obszar",
     ed_title: "Tytuł",
     ed_show_title: "Pokaż tytuł",
-    ed_title_helper: "Pozostaw puste, aby użyć nazwy obszaru",
-    ed_columns: "Kolumny",
-    ed_layout: "Układ",
-    ed_layout_helper: "Kafelki: jeden duży kafelek na encję, jak karta Kafelek, łatwiejszy do dotknięcia na telefonie",
-    ed_layout_compact: "Kompaktowy",
-    ed_layout_tiles: "Kafelki",
     ed_advanced: "Zaawansowane",
     ed_language: "Język",
     ed_language_helper: "Puste: język Home Assistanta",
     ed_language_auto: "Automatyczny",
-    ed_entities: "Jawnie podane encje (YAML)",
-    ed_entities_helper: "Zastępuje automatyczne wykrywanie: identyfikatory encji lub {entity, name, icon}",
-    ed_thresholds: "Progi komfortu (YAML)",
-    ed_thresholds_helper: "Dla każdego rodzaju, w jednostce czujnika, np. co2: [800, 1200] lub humidity: [25, 35, 70, 80]",
-    ed_rooms: "Pomieszczenia (YAML)",
-    ed_rooms_helper: "Kolejność i nadpisania: lista {area, name, icon, navigation_path}",
     ed_navigation_path: "Ścieżka nawigacji",
-    ed_all_off_button: "Przycisk „Wyłącz wszystko”",
     err_config: "Ustaw `area` lub `entities`",
     zoom_in: "Pokaż pełną kartę",
     zoom_out: "Wróć do widoku kompaktowego",
     ed_zoom: "Przycisk powiększenia",
     ed_zoom_helper: "Przełącza minikartę na pełną kartę i z powrotem",
-    rooms_all: "Pokaż wszystkie pomieszczenia",
-    rooms_check: "Tylko pomieszczenia wymagające uwagi",
-    ed_sort: "Sortowanie",
-    ed_sort_name: "Według nazwy",
-    ed_exclude_areas: "Pomieszczenia do wykluczenia",
   },
   ro: {
     all_closed: "Totul închis",
@@ -768,37 +410,18 @@ const RC_I18N = {
     on: "Pornită",
     off: "Oprită",
     turn_all_off: "Oprește tot",
-    ed_area: "Zonă",
     ed_title: "Titlu",
     ed_show_title: "Afișează titlul",
-    ed_title_helper: "Lasă gol pentru numele zonei",
-    ed_columns: "Coloane",
-    ed_layout: "Aspect",
-    ed_layout_helper: "Plăci: o placă mare pentru fiecare entitate, ca fișa Placă, mai ușor de atins pe telefon",
-    ed_layout_compact: "Compact",
-    ed_layout_tiles: "Plăci",
     ed_advanced: "Avansat",
     ed_language: "Limbă",
     ed_language_helper: "Gol: limba Home Assistant",
     ed_language_auto: "Automată",
-    ed_entities: "Entități explicite (YAML)",
-    ed_entities_helper: "Înlocuiește detectarea automată: ID-uri de entitate sau {entity, name, icon}",
-    ed_thresholds: "Praguri de confort (YAML)",
-    ed_thresholds_helper: "Pe tip, în unitatea senzorului, de ex. co2: [800, 1200] sau humidity: [25, 35, 70, 80]",
-    ed_rooms: "Camere (YAML)",
-    ed_rooms_helper: "Ordine și personalizări: o listă de {area, name, icon, navigation_path}",
     ed_navigation_path: "Cale de navigare",
-    ed_all_off_button: "Butonul „Oprește tot”",
     err_config: "Setează `area` sau `entities`",
     zoom_in: "Afișează cardul complet",
     zoom_out: "Înapoi la vizualizarea compactă",
     ed_zoom: "Buton de zoom",
     ed_zoom_helper: "Comută între mini-card și cardul complet",
-    rooms_all: "Afișează toate camerele",
-    rooms_check: "Doar camerele care necesită atenție",
-    ed_sort: "Sortare",
-    ed_sort_name: "După nume",
-    ed_exclude_areas: "Camere excluse",
   },
   da: {
     all_closed: "Alt lukket",
@@ -817,37 +440,18 @@ const RC_I18N = {
     on: "Tændt",
     off: "Slukket",
     turn_all_off: "Sluk alt",
-    ed_area: "Område",
     ed_title: "Titel",
     ed_show_title: "Vis titel",
-    ed_title_helper: "Lad stå tomt for at bruge områdets navn",
-    ed_columns: "Kolonner",
-    ed_layout: "Layout",
-    ed_layout_helper: "Fliser: én stor flise pr. entitet som Flise-kortet, nemmere at trykke på en telefon",
-    ed_layout_compact: "Kompakt",
-    ed_layout_tiles: "Fliser",
     ed_advanced: "Avanceret",
     ed_language: "Sprog",
     ed_language_helper: "Tomt: Home Assistants sprog",
     ed_language_auto: "Automatisk",
-    ed_entities: "Eksplicitte enheder (YAML)",
-    ed_entities_helper: "Erstatter den automatiske registrering: enheds-id'er eller {entity, name, icon}",
-    ed_thresholds: "Komforttærskler (YAML)",
-    ed_thresholds_helper: "Pr. type, i sensorens enhed, f.eks. co2: [800, 1200] eller humidity: [25, 35, 70, 80]",
-    ed_rooms: "Rum (YAML)",
-    ed_rooms_helper: "Rækkefølge og tilpasninger: en liste med {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigationssti",
-    ed_all_off_button: "Knappen »Sluk alt«",
     err_config: "Angiv `area` eller `entities`",
     zoom_in: "Vis hele kortet",
     zoom_out: "Tilbage til den kompakte visning",
     ed_zoom: "Zoomknap",
     ed_zoom_helper: "Skifter fra minikortet til hele kortet og tilbage",
-    rooms_all: "Vis alle rum",
-    rooms_check: "Kun rum, der kræver opmærksomhed",
-    ed_sort: "Sortering",
-    ed_sort_name: "Efter navn",
-    ed_exclude_areas: "Rum, der udelades",
   },
   sv: {
     all_closed: "Allt stängt",
@@ -866,37 +470,18 @@ const RC_I18N = {
     on: "På",
     off: "Av",
     turn_all_off: "Stäng av allt",
-    ed_area: "Område",
     ed_title: "Titel",
     ed_show_title: "Visa rubrik",
-    ed_title_helper: "Lämna tomt för områdets namn",
-    ed_columns: "Kolumner",
-    ed_layout: "Layout",
-    ed_layout_helper: "Rutor: en stor ruta per entitet, som Ruta-kortet, lättare att trycka på i mobilen",
-    ed_layout_compact: "Kompakt",
-    ed_layout_tiles: "Rutor",
     ed_advanced: "Avancerat",
     ed_language: "Språk",
     ed_language_helper: "Tomt: Home Assistants språk",
     ed_language_auto: "Automatiskt",
-    ed_entities: "Explicita entiteter (YAML)",
-    ed_entities_helper: "Ersätter den automatiska identifieringen: entitets-ID:n eller {entity, name, icon}",
-    ed_thresholds: "Komfortgränser (YAML)",
-    ed_thresholds_helper: "Per typ, i sensorns enhet, t.ex. co2: [800, 1200] eller humidity: [25, 35, 70, 80]",
-    ed_rooms: "Rum (YAML)",
-    ed_rooms_helper: "Ordning och anpassningar: en lista med {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigeringssökväg",
-    ed_all_off_button: "Knappen ”Stäng av allt”",
     err_config: "Ange `area` eller `entities`",
     zoom_in: "Visa hela kortet",
     zoom_out: "Tillbaka till kompakt vy",
     ed_zoom: "Zoomknapp",
     ed_zoom_helper: "Växlar mellan minikortet och hela kortet",
-    rooms_all: "Visa alla rum",
-    rooms_check: "Bara rum som behöver ses över",
-    ed_sort: "Sortering",
-    ed_sort_name: "Efter namn",
-    ed_exclude_areas: "Rum att utesluta",
   },
   bg: {
     all_closed: "Всичко е затворено",
@@ -915,37 +500,18 @@ const RC_I18N = {
     on: "Включен",
     off: "Изключен",
     turn_all_off: "Изключи всичко",
-    ed_area: "Зона",
     ed_title: "Заглавие",
     ed_show_title: "Показване на заглавието",
-    ed_title_helper: "Оставете празно за името на зоната",
-    ed_columns: "Колони",
-    ed_layout: "Оформление",
-    ed_layout_helper: "Плочки: по една голяма плочка за обект, като картата Плочка, по-лесна за докосване на телефон",
-    ed_layout_compact: "Компактно",
-    ed_layout_tiles: "Плочки",
     ed_advanced: "Разширени",
     ed_language: "Език",
     ed_language_helper: "Празно: езикът на Home Assistant",
     ed_language_auto: "Автоматично",
-    ed_entities: "Изрично зададени обекти (YAML)",
-    ed_entities_helper: "Заменя автоматичното откриване: ID на обекти или {entity, name, icon}",
-    ed_thresholds: "Прагове на комфорт (YAML)",
-    ed_thresholds_helper: "По вид, в мерната единица на сензора, напр. co2: [800, 1200] или humidity: [25, 35, 70, 80]",
-    ed_rooms: "Стаи (YAML)",
-    ed_rooms_helper: "Ред и персонализиране: списък от {area, name, icon, navigation_path}",
     ed_navigation_path: "Път за навигация",
-    ed_all_off_button: "Бутон „Изключи всичко“",
     err_config: "Задайте `area` или `entities`",
     zoom_in: "Покажи пълната карта",
     zoom_out: "Обратно към компактния изглед",
     ed_zoom: "Бутон за увеличение",
     ed_zoom_helper: "Превключва от мини картата към пълната карта и обратно",
-    rooms_all: "Покажи всички стаи",
-    rooms_check: "Само стаите, които изискват внимание",
-    ed_sort: "Сортиране",
-    ed_sort_name: "По име",
-    ed_exclude_areas: "Стаи за пропускане",
   },
   ru: {
     all_closed: "Всё закрыто",
@@ -964,37 +530,18 @@ const RC_I18N = {
     on: "Включено",
     off: "Выключено",
     turn_all_off: "Выключить всё",
-    ed_area: "Пространство",
     ed_title: "Заголовок",
     ed_show_title: "Показывать заголовок",
-    ed_title_helper: "Оставьте пустым, чтобы использовать название пространства",
-    ed_columns: "Столбцы",
-    ed_layout: "Макет",
-    ed_layout_helper: "Плитки: одна большая плитка на объект, как карточка «Плитка», удобнее нажимать на телефоне",
-    ed_layout_compact: "Компактный",
-    ed_layout_tiles: "Плитки",
     ed_advanced: "Дополнительно",
     ed_language: "Язык",
     ed_language_helper: "Пусто: язык Home Assistant",
     ed_language_auto: "Автоматически",
-    ed_entities: "Явно заданные объекты (YAML)",
-    ed_entities_helper: "Заменяет автоматическое обнаружение: ID объектов или {entity, name, icon}",
-    ed_thresholds: "Пороги комфорта (YAML)",
-    ed_thresholds_helper: "Для каждого типа, в единицах датчика, например co2: [800, 1200] или humidity: [25, 35, 70, 80]",
-    ed_rooms: "Комнаты (YAML)",
-    ed_rooms_helper: "Порядок и настройки: список {area, name, icon, navigation_path}",
     ed_navigation_path: "Путь навигации",
-    ed_all_off_button: "Кнопка «Выключить всё»",
     err_config: "Укажите `area` или `entities`",
     zoom_in: "Показать полную карточку",
     zoom_out: "Вернуться к компактному виду",
     ed_zoom: "Кнопка масштаба",
     ed_zoom_helper: "Переключает мини-карточку на полную карточку и обратно",
-    rooms_all: "Показать все комнаты",
-    rooms_check: "Только комнаты, требующие внимания",
-    ed_sort: "Сортировка",
-    ed_sort_name: "По названию",
-    ed_exclude_areas: "Исключить комнаты",
   },
   uk: {
     all_closed: "Усе зачинено",
@@ -1013,37 +560,18 @@ const RC_I18N = {
     on: "Увімкнено",
     off: "Вимкнено",
     turn_all_off: "Вимкнути все",
-    ed_area: "Простір",
     ed_title: "Заголовок",
     ed_show_title: "Показувати заголовок",
-    ed_title_helper: "Залиште порожнім, щоб використати назву простору",
-    ed_columns: "Стовпці",
-    ed_layout: "Макет",
-    ed_layout_helper: "Плитки: одна велика плитка на сутність, як картка «Плитка», зручніше торкатися на телефоні",
-    ed_layout_compact: "Компактний",
-    ed_layout_tiles: "Плитки",
     ed_advanced: "Додатково",
     ed_language: "Мова",
     ed_language_helper: "Порожньо: мова Home Assistant",
     ed_language_auto: "Автоматично",
-    ed_entities: "Явно задані сутності (YAML)",
-    ed_entities_helper: "Замінює автоматичне виявлення: ID сутностей або {entity, name, icon}",
-    ed_thresholds: "Пороги комфорту (YAML)",
-    ed_thresholds_helper: "Для кожного типу, в одиницях датчика, наприклад co2: [800, 1200] або humidity: [25, 35, 70, 80]",
-    ed_rooms: "Кімнати (YAML)",
-    ed_rooms_helper: "Порядок і налаштування: список {area, name, icon, navigation_path}",
     ed_navigation_path: "Шлях навігації",
-    ed_all_off_button: "Кнопка «Вимкнути все»",
     err_config: "Вкажіть `area` або `entities`",
     zoom_in: "Показати повну картку",
     zoom_out: "Повернутися до компактного вигляду",
     ed_zoom: "Кнопка масштабу",
     ed_zoom_helper: "Перемикає міні-картку на повну картку й назад",
-    rooms_all: "Показати всі кімнати",
-    rooms_check: "Лише кімнати, що потребують уваги",
-    ed_sort: "Сортування",
-    ed_sort_name: "За назвою",
-    ed_exclude_areas: "Виключити кімнати",
   },
   hu: {
     all_closed: "Minden zárva",
@@ -1062,37 +590,18 @@ const RC_I18N = {
     on: "Be",
     off: "Ki",
     turn_all_off: "Minden kikapcsolása",
-    ed_area: "Terület",
     ed_title: "Cím",
     ed_show_title: "Cím megjelenítése",
-    ed_title_helper: "Hagyd üresen a terület nevéhez",
-    ed_columns: "Oszlopok",
-    ed_layout: "Elrendezés",
-    ed_layout_helper: "Csempék: entitásonként egy nagy csempe, mint a Csempe kártya, telefonon könnyebb megérinteni",
-    ed_layout_compact: "Tömör",
-    ed_layout_tiles: "Csempék",
     ed_advanced: "Speciális",
     ed_language: "Nyelv",
     ed_language_helper: "Üres: a Home Assistant nyelve",
     ed_language_auto: "Automatikus",
-    ed_entities: "Kifejezetten megadott entitások (YAML)",
-    ed_entities_helper: "Felülírja az automatikus felismerést: entitásazonosítók vagy {entity, name, icon}",
-    ed_thresholds: "Komfortküszöbök (YAML)",
-    ed_thresholds_helper: "Típusonként, az érzékelő mértékegységében, pl. co2: [800, 1200] vagy humidity: [25, 35, 70, 80]",
-    ed_rooms: "Helyiségek (YAML)",
-    ed_rooms_helper: "Sorrend és testreszabás: {area, name, icon, navigation_path} elemek listája",
     ed_navigation_path: "Navigációs útvonal",
-    ed_all_off_button: "„Minden kikapcsolása” gomb",
     err_config: "Állítsd be az `area` vagy az `entities` értékét",
     zoom_in: "A teljes kártya megjelenítése",
     zoom_out: "Vissza a kompakt nézethez",
     ed_zoom: "Nagyítás gomb",
     ed_zoom_helper: "Vált a mini kártya és a teljes kártya között",
-    rooms_all: "Minden helyiség megjelenítése",
-    rooms_check: "Csak a figyelmet igénylő helyiségek",
-    ed_sort: "Rendezés",
-    ed_sort_name: "Név szerint",
-    ed_exclude_areas: "Kihagyott helyiségek",
   },
   sk: {
     all_closed: "Všetko zatvorené",
@@ -1111,37 +620,18 @@ const RC_I18N = {
     on: "Zapnuté",
     off: "Vypnuté",
     turn_all_off: "Vypnúť všetko",
-    ed_area: "Oblasť",
     ed_title: "Názov",
     ed_show_title: "Zobraziť názov",
-    ed_title_helper: "Nechajte prázdne pre názov oblasti",
-    ed_columns: "Stĺpce",
-    ed_layout: "Rozloženie",
-    ed_layout_helper: "Dlaždice: jedna veľká dlaždica na entitu ako karta Dlaždica, na telefóne sa ľahšie ťuká",
-    ed_layout_compact: "Kompaktné",
-    ed_layout_tiles: "Dlaždice",
     ed_advanced: "Rozšírené",
     ed_language: "Jazyk",
     ed_language_helper: "Prázdne: jazyk Home Assistanta",
     ed_language_auto: "Automaticky",
-    ed_entities: "Explicitné entity (YAML)",
-    ed_entities_helper: "Nahrádza automatické vyhľadávanie: ID entít alebo {entity, name, icon}",
-    ed_thresholds: "Prahy komfortu (YAML)",
-    ed_thresholds_helper: "Podľa druhu, v jednotke senzora, napr. co2: [800, 1200] alebo humidity: [25, 35, 70, 80]",
-    ed_rooms: "Miestnosti (YAML)",
-    ed_rooms_helper: "Poradie a úpravy: zoznam {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigačná cesta",
-    ed_all_off_button: "Tlačidlo „Vypnúť všetko“",
     err_config: "Nastavte `area` alebo `entities`",
     zoom_in: "Zobraziť celú kartu",
     zoom_out: "Späť na kompaktné zobrazenie",
     ed_zoom: "Tlačidlo priblíženia",
     ed_zoom_helper: "Prepína minikartu na celú kartu a späť",
-    rooms_all: "Zobraziť všetky miestnosti",
-    rooms_check: "Len miestnosti vyžadujúce pozornosť",
-    ed_sort: "Zoradenie",
-    ed_sort_name: "Podľa názvu",
-    ed_exclude_areas: "Vynechané miestnosti",
   },
   cs: {
     all_closed: "Vše zavřeno",
@@ -1160,37 +650,18 @@ const RC_I18N = {
     on: "Zapnuto",
     off: "Vypnuto",
     turn_all_off: "Vypnout vše",
-    ed_area: "Oblast",
     ed_title: "Název",
     ed_show_title: "Zobrazit název",
-    ed_title_helper: "Ponechte prázdné pro název oblasti",
-    ed_columns: "Sloupce",
-    ed_layout: "Rozložení",
-    ed_layout_helper: "Dlaždice: jedna velká dlaždice na entitu jako karta Dlaždice, na telefonu se snáz ťuká",
-    ed_layout_compact: "Kompaktní",
-    ed_layout_tiles: "Dlaždice",
     ed_advanced: "Pokročilé",
     ed_language: "Jazyk",
     ed_language_helper: "Prázdné: jazyk Home Assistanta",
     ed_language_auto: "Automaticky",
-    ed_entities: "Explicitní entity (YAML)",
-    ed_entities_helper: "Nahrazuje automatické vyhledávání: ID entit nebo {entity, name, icon}",
-    ed_thresholds: "Prahy komfortu (YAML)",
-    ed_thresholds_helper: "Podle druhu, v jednotce senzoru, např. co2: [800, 1200] nebo humidity: [25, 35, 70, 80]",
-    ed_rooms: "Místnosti (YAML)",
-    ed_rooms_helper: "Pořadí a úpravy: seznam {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigační cesta",
-    ed_all_off_button: "Tlačítko „Vypnout vše“",
     err_config: "Nastavte `area` nebo `entities`",
     zoom_in: "Zobrazit celou kartu",
     zoom_out: "Zpět na kompaktní zobrazení",
     ed_zoom: "Tlačítko přiblížení",
     ed_zoom_helper: "Přepíná minikartu na celou kartu a zpět",
-    rooms_all: "Zobrazit všechny místnosti",
-    rooms_check: "Jen místnosti vyžadující pozornost",
-    ed_sort: "Řazení",
-    ed_sort_name: "Podle názvu",
-    ed_exclude_areas: "Vynechané místnosti",
   },
   sl: {
     all_closed: "Vse zaprto",
@@ -1209,37 +680,18 @@ const RC_I18N = {
     on: "Vklopljeno",
     off: "Izklopljeno",
     turn_all_off: "Izklopi vse",
-    ed_area: "Območje",
     ed_title: "Naslov",
     ed_show_title: "Prikaži naslov",
-    ed_title_helper: "Pustite prazno za ime območja",
-    ed_columns: "Stolpci",
-    ed_layout: "Postavitev",
-    ed_layout_helper: "Ploščice: ena velika ploščica na entiteto, kot kartica Ploščica, lažje za dotik na telefonu",
-    ed_layout_compact: "Strnjena",
-    ed_layout_tiles: "Ploščice",
     ed_advanced: "Napredno",
     ed_language: "Jezik",
     ed_language_helper: "Prazno: jezik Home Assistanta",
     ed_language_auto: "Samodejno",
-    ed_entities: "Izrecno navedene entitete (YAML)",
-    ed_entities_helper: "Nadomesti samodejno zaznavanje: ID-ji entitet ali {entity, name, icon}",
-    ed_thresholds: "Pragovi udobja (YAML)",
-    ed_thresholds_helper: "Po vrsti, v enoti senzorja, npr. co2: [800, 1200] ali humidity: [25, 35, 70, 80]",
-    ed_rooms: "Prostori (YAML)",
-    ed_rooms_helper: "Vrstni red in prilagoditve: seznam {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigacijska pot",
-    ed_all_off_button: "Gumb »Izklopi vse«",
     err_config: "Nastavite `area` ali `entities`",
     zoom_in: "Prikaži celotno kartico",
     zoom_out: "Nazaj na strnjen pogled",
     ed_zoom: "Gumb za povečavo",
     ed_zoom_helper: "Preklopi mini kartico v celotno kartico in nazaj",
-    rooms_all: "Prikaži vse prostore",
-    rooms_check: "Samo prostori, ki potrebujejo pozornost",
-    ed_sort: "Razvrščanje",
-    ed_sort_name: "Po imenu",
-    ed_exclude_areas: "Izpuščeni prostori",
   },
   lv: {
     all_closed: "Viss aizvērts",
@@ -1258,37 +710,18 @@ const RC_I18N = {
     on: "Ieslēgts",
     off: "Izslēgts",
     turn_all_off: "Izslēgt visu",
-    ed_area: "Zona",
     ed_title: "Virsraksts",
     ed_show_title: "Rādīt virsrakstu",
-    ed_title_helper: "Atstājiet tukšu, lai izmantotu zonas nosaukumu",
-    ed_columns: "Kolonnas",
-    ed_layout: "Izkārtojums",
-    ed_layout_helper: "Flīzes: viena liela flīze katrai entītijai kā kartītē Flīze, tālrunī vieglāk pieskarties",
-    ed_layout_compact: "Kompakts",
-    ed_layout_tiles: "Flīzes",
     ed_advanced: "Papildu",
     ed_language: "Valoda",
     ed_language_helper: "Tukšs: Home Assistant valoda",
     ed_language_auto: "Automātiski",
-    ed_entities: "Tieši norādītas vienības (YAML)",
-    ed_entities_helper: "Aizstāj automātisko noteikšanu: vienību ID vai {entity, name, icon}",
-    ed_thresholds: "Komforta sliekšņi (YAML)",
-    ed_thresholds_helper: "Pēc veida, sensora mērvienībā, piem., co2: [800, 1200] vai humidity: [25, 35, 70, 80]",
-    ed_rooms: "Telpas (YAML)",
-    ed_rooms_helper: "Secība un pielāgojumi: saraksts ar {area, name, icon, navigation_path}",
     ed_navigation_path: "Navigācijas ceļš",
-    ed_all_off_button: "Poga “Izslēgt visu”",
     err_config: "Iestatiet `area` vai `entities`",
     zoom_in: "Rādīt pilno karti",
     zoom_out: "Atpakaļ uz kompakto skatu",
     ed_zoom: "Tālummaiņas poga",
     ed_zoom_helper: "Pārslēdz mini karti uz pilno karti un atpakaļ",
-    rooms_all: "Rādīt visas telpas",
-    rooms_check: "Tikai telpas, kurām jāpievērš uzmanība",
-    ed_sort: "Kārtošana",
-    ed_sort_name: "Pēc nosaukuma",
-    ed_exclude_areas: "Izslēdzamās telpas",
   },
   el: {
     all_closed: "Όλα κλειστά",
@@ -1307,37 +740,18 @@ const RC_I18N = {
     on: "Ενεργή",
     off: "Ανενεργή",
     turn_all_off: "Απενεργοποίηση όλων",
-    ed_area: "Περιοχή",
     ed_title: "Τίτλος",
     ed_show_title: "Εμφάνιση τίτλου",
-    ed_title_helper: "Αφήστε το κενό για το όνομα της περιοχής",
-    ed_columns: "Στήλες",
-    ed_layout: "Διάταξη",
-    ed_layout_helper: "Πλακίδια: ένα μεγάλο πλακίδιο ανά οντότητα, όπως η κάρτα Πλακίδιο, πιο εύκολο στο πάτημα στο κινητό",
-    ed_layout_compact: "Συμπαγής",
-    ed_layout_tiles: "Πλακίδια",
     ed_advanced: "Για προχωρημένους",
     ed_language: "Γλώσσα",
     ed_language_helper: "Κενό: η γλώσσα του Home Assistant",
     ed_language_auto: "Αυτόματα",
-    ed_entities: "Ρητές οντότητες (YAML)",
-    ed_entities_helper: "Αντικαθιστά τον αυτόματο εντοπισμό: αναγνωριστικά οντοτήτων ή {entity, name, icon}",
-    ed_thresholds: "Όρια άνεσης (YAML)",
-    ed_thresholds_helper: "Ανά είδος, στη μονάδα του αισθητήρα, π.χ. co2: [800, 1200] ή humidity: [25, 35, 70, 80]",
-    ed_rooms: "Δωμάτια (YAML)",
-    ed_rooms_helper: "Σειρά και προσαρμογές: μια λίστα με {area, name, icon, navigation_path}",
     ed_navigation_path: "Διαδρομή πλοήγησης",
-    ed_all_off_button: "Κουμπί «Απενεργοποίηση όλων»",
     err_config: "Ορίστε `area` ή `entities`",
     zoom_in: "Εμφάνιση της πλήρους κάρτας",
     zoom_out: "Επιστροφή στη συμπαγή προβολή",
     ed_zoom: "Κουμπί ζουμ",
     ed_zoom_helper: "Εναλλάσσει τη μίνι κάρτα με την πλήρη κάρτα",
-    rooms_all: "Εμφάνιση όλων των δωματίων",
-    rooms_check: "Μόνο τα δωμάτια που χρειάζονται έλεγχο",
-    ed_sort: "Ταξινόμηση",
-    ed_sort_name: "Κατά όνομα",
-    ed_exclude_areas: "Δωμάτια προς εξαίρεση",
   },
 };
 
@@ -2826,8 +2240,6 @@ const rcEsc = (s) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 
-const rcEscRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 // A power in the card's language (*1,2 kW* in French), from `lang` (defaults to the browser's).
 const rcWatts = (w, lang) => {
   const kw = w >= 1000;
@@ -2839,15 +2251,6 @@ const rcWatts = (w, lang) => {
     text = (kw ? w / 1000 : w).toFixed(digits);
   }
   return `${text} ${kw ? "kW" : "W"}`;
-};
-
-// Strips a prefix, a suffix and the area name from an entity name, then capitalises it.
-const rcCleanName = (name, areaName, prefix, suffix) => {
-  let n = (name || "").replace(prefix, "").replace(suffix, "").trim();
-  if (areaName && n.toLowerCase() !== areaName.toLowerCase()) {
-    n = n.replace(new RegExp(`(^${rcEscRe(areaName)}\\s+|\\s+${rcEscRe(areaName)}$)`, "i"), "");
-  }
-  return n.charAt(0).toUpperCase() + n.slice(1);
 };
 
 const rcMoreInfo = (node, entityId) => {
@@ -3245,47 +2648,6 @@ class RcCard extends HTMLElement {
   }
 }
 
-// Lights and plugs: entities that are on or off, a status counting the ones on, an optional "turn everything off".
-// Subclasses set `static headIcons` ([on, off]) and `static emptyKey`, and implement `_sigOf(item)` (what a tile
-// shows) and `_tileOf(item)`; `_statusExtra(lit)` adds to the status.
-class RcToggleCard extends RcCard {
-  _statusExtra() {
-    return "";
-  }
-
-  // What the header shows, on the full card and the mini card: level, icon, status (`ofTotal`: *2/5 on*) and whether
-  // the "turn everything off" button is there. Null when nothing changed, or when the card hides itself.
-  _summary(items, ofTotal = false) {
-    const c = this._config;
-    const lit = items.filter((i) => i.on);
-    const level = lit.length ? "on" : "off";
-    if (!this._changed([ofTotal, items.map((i) => this._sigOf(i))])) return null;
-    if (this._hide(c.hide_when_off && level === "off")) return null;
-
-    const shown = c.only_on ? items.filter((i) => i.on || i.unavailable) : items;
-    this._shown = shown.length;
-    const [onIcon, offIcon] = this.constructor.headIcons;
-    const n = ofTotal ? `${lit.length}/${items.length}` : lit.length;
-    const status = lit.length
-      ? this._t(rcPluralKey(this.constructor.i18n, this._lang(), "on", lit.length), { n })
-      : this._t(items.length ? "all_off" : this.constructor.emptyKey);
-    return {
-      level,
-      shown,
-      icon: lit.length ? onIcon : offIcon,
-      status: status + this._statusExtra(lit),
-      allOff: c.all_off_button && lit.length > 0,
-    };
-  }
-
-  _draw(items) {
-    const s = this._summary(items);
-    if (!s) return;
-    const head = this._head({ ...s, title: this._config.title || this._areaName() || this._t("title") });
-    this._paint(s.level, head, s.shown.map((i) => this._tileOf(i)).join(""));
-  }
-}
-
 // ── Mini cards ───────────────────────────────────────────────────────────────
 // A mini card shows what its full card (`Base`) shows on two lines: the room badge, title and status, then one chip
 // per entity. Its zoom button (top right, `zoom: false` removes it) switches it to the full card and back; a click
@@ -3388,114 +2750,11 @@ const rcMini = (Base, tag, styles, { alertsOnly = false } = {}) =>
     }
   };
 
-// Lights and plugs mini cards: the status counts what is on out of the total (*2/5 on*), with the full card's
-// "turn everything off" button; then a tinted pill (icon and name) for each entity on, its icon alone for the others.
-// The subclass may implement `_chipExtra(item)`, shown after the name (a plug's power draw).
-const rcToggleMini = (Base, tag, styles) =>
-  class extends rcMini(Base, tag, `${RC_TOGGLE_MINI_STYLES}${styles}`) {
-    _chipExtra() {
-      return "";
-    }
-
-    _drawMini(items) {
-      const s = this._summary(items, true);
-      if (!s) return;
-      const chips = s.shown
-        .map((i) => {
-          const cls = i.unavailable ? " na" : i.on ? " on pill" : " off";
-          const style = i.on && i.color ? ` style="--t:${rcEsc(i.color)}"` : "";
-          return `
-          <button class="r${cls}" data-id="${rcEsc(i.id)}"${style} title="${rcEsc(i.name)} — ${rcEsc(i.state)}">
-            <ha-icon icon="${rcEsc(i.icon)}"></ha-icon>${i.on ? `<span>${rcEsc(i.name)}</span>${this._chipExtra(i)}` : ""}
-          </button>`;
-        })
-        .join("");
-      this._paintMini({ level: s.level, icon: s.icon, status: s.status, chips, allOff: s.allOff });
-    }
-  };
-
 // ── Overviews: the open room ─────────────────────────────────────────────────
-// What both overviews share around their room tiles: a tap follows the room's `navigation_path` or unfolds its
-// details in the `.panel` (filled by the subclass's `_fillPanel`, from `_roomGrid`), a click anywhere else folds it
-// back and returns to the rooms needing a look. The subclass implements `_shownRooms()` (the tiles shown) and
-// `_clearPanel()` (drops its detail cards); `_beforeFold()` (optional) runs first on an outside click.
-const rcRoomsPanel = (Base) =>
-  class extends Base {
-    constructor() {
-      super();
-      this._onOutside = (ev) => {
-        if (!rcOutside(this, ev)) return;
-        this._beforeFold?.();
-        if (this._openArea) this._toggle(null);
-        rcUnzoom(this);
-      };
-    }
-
-    // A new config rebuilds the room details, which take part of it (language, exclude, thresholds…).
-    setConfig(config) {
-      this._panelArea = null;
-      super.setConfig(config);
-    }
-
-    connectedCallback() {
-      super.connectedCallback?.();
-      this._outside ??= watchOutside(this, this._onOutside);
-      this._outside.on();
-    }
-
-    disconnectedCallback() {
-      super.disconnectedCallback?.();
-      this._outside?.off();
-      // Left (another dashboard view, a conditional card hidden): folded back as by a click elsewhere, so that the
-      // card does not come back with a room open, zoomed or its popup open.
-      this._beforeFold?.();
-      if (this._openArea) this._toggle(null);
-      rcUnzoom(this);
-    }
-
-    _tap(aid) {
-      const x = this._shownRooms().find((r) => r.id === aid);
-      if (x?.navigation_path) rcNavigate(x.navigation_path);
-      else this._toggle(this._openArea === aid ? null : aid);
-    }
-
-    // Opens a room's details (the render fills the panel), or folds them back.
-    _toggle(aid) {
-      this._openArea = aid;
-      this._panelArea = null;
-      this._sig = null;
-      this._render();
-      if (aid) return;
-      const panel = this.shadowRoot.querySelector(".panel");
-      panel.hidden = true;
-      panel.innerHTML = "";
-      this._clearPanel();
-    }
-  };
 
 // ── Editor ───────────────────────────────────────────────────────────────────
-// Fields shared by the room cards' editors.
-const rcAreaFields = (navigation) => [
-  { name: "area", selector: { area: {} } },
-  { name: "title", selector: { text: {} } },
-  ...(navigation ? [{ name: "navigation_path", selector: { navigation: {} } }] : []),
-  { name: "columns", selector: { number: { min: 1, max: 4, mode: "box" } } },
-];
-// Compact tiles (default) or large ones, the size of Home Assistant's Tile card.
-const rcLayoutField = (i18n, lang) => ({
-  name: "layout",
-  selector: {
-    select: {
-      mode: "dropdown",
-      options: ["compact", "tiles"].map((value) => ({ value, label: rcT(i18n, lang, `ed_layout_${value}`) })),
-    },
-  },
-});
 const rcBooleans = (...names) => names.map((name) => ({ name, selector: { boolean: {} } }));
 
-// "Advanced" section, folded, with the options that are lists or maps (edited as YAML) and the language. Its fields
-// sit at the root of the config (`flatten`).
-const RC_ADVANCED_HELPERS = ["language", "entities", "thresholds", "rooms"];
 const rcAdvanced = (i18n, lang, ...names) => [
   {
     name: "advanced",
@@ -3540,53 +2799,6 @@ const rcAdvanced = (i18n, lang, ...names) => [
     ),
   },
 ];
-// Entity picker limited to `ids`, left out when there is none.
-const rcEntitiesField = (name, ids) =>
-  ids.length ? [{ name, selector: { entity: { multiple: true, include_entities: ids } } }] : [];
-
-// Include list: the entities of the card's domains (narrowed by `card.includeMatch` when set), anywhere in the home,
-// that the card does not show yet (entities already included stay in the list).
-const rcIncludeField = (card, hass, config) => {
-  if (!hass) return [];
-  const shown = new Set(
-    rcProbe(card, hass, { ...config, entities: undefined, include: [] })
-      ._entries()
-      .map((e) => e.entity),
-  );
-  const ids = Object.keys(hass.states).filter(
-    (id) =>
-      card.includeDomains.includes(id.split(".")[0]) &&
-      (!card.includeMatch || card.includeMatch(hass, id)) &&
-      !shown.has(id) &&
-      !hass.entities?.[id]?.hidden &&
-      !hass.entities?.[id]?.entity_category,
-  );
-  for (const e of config?.include || []) {
-    const id = typeof e === "string" ? e : e.entity;
-    if (!ids.includes(id)) ids.push(id);
-  }
-  return rcEntitiesField("include", ids);
-};
-
-// A detached card of class `card`, with `config` over its defaults, to run its discovery from the editor.
-const rcProbe = (card, hass, config) => {
-  const probe = document.createElement(card.tag);
-  probe._hass = hass;
-  probe._config = { ...card.defaults, ...config };
-  return probe;
-};
-
-// Exclude list limited to what the card finds in the chosen room, with the card's own rules
-// (entities already excluded stay in the list).
-const rcExcludeField = (card, hass, config) => {
-  const ids =
-    hass && config?.area
-      ? rcProbe(card, hass, { ...config, entities: undefined, exclude: [] })
-          ._entries()
-          .map((e) => e.entity)
-      : [];
-  return rcEntitiesField("exclude", ids);
-};
 
 // `schema(lang, hass, config)` lists the fields; options left at the card's default are not written to the YAML
 // (list defaults such as `exclude: []` are not shown in the form: an empty list is never written anyway).
@@ -3791,68 +3003,6 @@ const RC_ZOOM_STYLES = `
   .zoom ha-icon { --mdc-icon-size: 16px; }
   .zoom:hover { background: color-mix(in srgb, var(--rc-idle) 16%, transparent); color: var(--primary-text-color); }
   .zoom:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
-`;
-
-// Lights and plugs mini cards: the "turn everything off" status (not filled: tinted on hover, like the zoom button)
-// and the chips of the entities that are off (icon alone, grey).
-const RC_TOGGLE_MINI_STYLES = `
-  .st.action { all: unset; flex: 0 1 auto; min-width: 0; box-sizing: border-box; position: relative; cursor: pointer;
-               display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 1px 6px; border-radius: 999px;
-               font-size: 11px; font-weight: 500; color: var(--c); }
-  .st.action ha-icon { --mdc-icon-size: 12px; flex: none; }
-  .st.action:hover { background: color-mix(in srgb, var(--c) 14%, transparent); }
-  .st.action:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
-  @container (max-width: 200px) {
-    .st.action { width: auto; height: auto; padding: 1px 4px; }
-    .st.action::before { content: none; }
-  }
-  .r.off, .r.na { padding: 0 3px; }
-  .r.off ha-icon, .r.na ha-icon { margin-right: 0; }
-  .r.off { --t: var(--rc-idle); }
-  .r.na  { --t: var(--rc-na); opacity: .7; }
-  .r small { flex: none; font-size: 10px; font-weight: 400; opacity: .8; margin-left: 4px; }
-`;
-
-// The overviews' room grid: the tiles, their icon, chips row, empty state and details panel. Each overview sets the
-// tile's default tint and its own levels (`.room { --t: … }`, `.room.lvl-…`), the chips' spacing and the panel extras.
-const RC_ROOM_GRID_STYLES = `
-  .grid { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
-  @container (max-width: 340px) { .grid:not(.fixed) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  /* A card this narrow (6 columns of the Sections view on a phone): one room per row, whatever the columns option. Two
-     left the name a letter or two ("B…") and pushed a chip out of its tile. */
-  @container (max-width: 260px) { .grid.grid { grid-template-columns: minmax(0, 1fr); } }
-  .grid[hidden] { display: none; }
-  .room { all: unset; box-sizing: border-box; cursor: pointer; min-width: 0;
-          display: grid; grid-template-columns: 26px minmax(0, 1fr); grid-template-areas: "ic name" "ic state" "chips chips";
-          column-gap: 7px; align-items: center; align-content: start; padding: 6px 7px; border-radius: 10px;
-          background: var(--secondary-background-color, transparent); border: 1px solid transparent;
-          transition: background .2s, border-color .2s; }
-  .room.lvl-warn, .room.lvl-alert {
-    background: color-mix(in srgb, var(--t) 9%, var(--secondary-background-color, transparent));
-    border-color: color-mix(in srgb, var(--t) 22%, transparent); }
-  .room:hover { background: color-mix(in srgb, var(--t) 13%, var(--secondary-background-color, transparent)); }
-  .room:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
-  .room.sel { border-color: color-mix(in srgb, var(--primary-color) 55%, transparent); }
-  .room .ic { grid-area: ic; align-self: start; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-              color: var(--t); background: color-mix(in srgb, var(--t) 16%, transparent); }
-  .room.lvl-ok .ic { color: var(--primary-text-color); background: color-mix(in srgb, var(--rc-idle) 14%, transparent); }
-  .room .ic ha-icon { --mdc-icon-size: 15px; }
-  .room .name { grid-area: name; }
-  /* The state (a sentence: "Water leak", "Too humid +1") wraps between its words only; a word too long for its line
-     ends with "…" rather than being broken ("Pr|es|en|ce"). */
-  .room .state { grid-area: state; overflow-wrap: normal; overflow: hidden; text-overflow: ellipsis; }
-  .room:not(.lvl-ok) .state { color: color-mix(in srgb, var(--t) 50%, var(--primary-text-color, #212121)); }
-  .chips { grid-area: chips; display: flex; flex-wrap: wrap; }
-  .chips:empty { display: none; }
-  .empty { grid-column: 1 / -1; padding: 12px; text-align: center; font-size: 13px; color: var(--secondary-text-color); }
-  .panel { margin-top: 8px; border-radius: 12px; overflow: hidden; background: var(--secondary-background-color, transparent);
-           --ha-card-background: transparent; --card-background-color: transparent;
-           --ha-card-box-shadow: none; --ha-card-border-width: 0; }
-  .panel[hidden] { display: none; }
-  /* The unfolded room cards are custom elements with no display of their own: inline, the separator between them
-     (border-top) would only paint on an empty first line box around their block <ha-card>. */
-  .panel > * { display: block; }
-  @media (prefers-reduced-motion: reduce) { .room { animation: none; transition: none; } }
 `;
 
 const RC_MINI_STYLES = `${RC_ZOOM_STYLES}

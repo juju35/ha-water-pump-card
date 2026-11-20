@@ -134,30 +134,30 @@ type: custom:water-pump-mini-card
 entity: switch.sump_pump
 ```
 
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `entity` | string | the first pump found | The pump's switch, its running binary sensor, or its power sensor |
-| `title` | string | the device's name | Card title |
-| `show_title` | boolean | `true` | Show the title |
-| `navigation_path` | string | | A tap on the header opens this dashboard path |
-| `kind` | string | `auto` | The kind of pump (see the table above); `auto` finds it from the name |
-| `level` | string | the device's | The pit's or tank's level, in % |
-| `pressure` | string | the device's | A pressure sensor |
-| `flow` | string | the device's | A flow sensor |
-| `volume` | string | the device's | A water volume sensor (today's) |
-| `alarm` | string | the device's | A binary sensor: a high-level float or a fault |
-| `threshold` | number | `20` | Watts at or above which the pump runs, when it is read from its power |
-| `level_start` | number | | The level (%) at which the pump starts: a mark on the gauge |
-| `level_stop` | number | | The level (%) at which it stops: a mark on the gauge |
-| `level_alarm` | number | `85` for a sump pump | The level (%) of the alarm: a mark, and an alert at or above it |
-| `max_run` | number | by kind | Minutes non-stop before an alert (`0`: never) |
-| `illustration` | boolean | `true` | Both: the illustrated header (`false`: the classic header) |
-| `illustration_theme` | string | `auto` | Both: `auto` (follows the Home Assistant theme: night with a dark theme, day with a light theme), `day` or `night` |
-| `show_runs` | boolean | `true` | The runs of the last 24 hours |
-| `animations` | boolean | `true` | Running water and turning fan |
-| `show_controls` | boolean | `true` | The switch |
-| `zoom` | boolean | `true` | Mini card: the zoom button |
-| `language` | string | Home Assistant's | Advanced: one of the [languages](#translations) |
+| Option | Card | Type | Default | Description |
+|---|---|---|---|---|
+| `entity` | both | string | the first pump found | The pump's switch, its running binary sensor, or its power sensor |
+| `title` | both | string | the device's name | Card title |
+| `show_title` | both | boolean | `true` | Show the title |
+| `navigation_path` | both | string | | A tap on the header opens this dashboard path |
+| `kind` | both | string | `auto` | The kind of pump (see the table above); `auto` finds it from the name |
+| `level` | both | string | the device's | The pit's or tank's level, in % |
+| `pressure` | both | string | the device's | A pressure sensor |
+| `flow` | both | string | the device's | A flow sensor |
+| `volume` | both | string | the device's | A water volume sensor (today's) |
+| `alarm` | both | string | the device's | A binary sensor: a high-level float or a fault |
+| `threshold` | both | number | `20` | Watts at or above which the pump runs, when it is read from its power |
+| `level_start` | both | number | | The level (%) at which the pump starts: a mark on the gauge |
+| `level_stop` | both | number | | The level (%) at which it stops: a mark on the gauge |
+| `level_alarm` | both | number | `85` for a sump pump | The level (%) of the alarm: a mark, and an alert at or above it |
+| `max_run` | both | number | by kind | Minutes non-stop before an alert (`0`: never) |
+| `illustration` | both | boolean | `true` | The illustrated header (`false`: the classic header) |
+| `illustration_theme` | both | string | `auto` | `auto` (follows the Home Assistant theme: night with a dark theme, day with a light theme), `day` or `night` |
+| `show_runs` | both | boolean | `true` | The runs of the last 24 hours |
+| `animations` | both | boolean | `true` | Running water and turning fan |
+| `show_controls` | both | boolean | `true` | The switch |
+| `zoom` | mini | boolean | `true` | The zoom button at the top right: it switches to the full card and back |
+| `language` | both | string | Home Assistant's | One of the [languages](#translations) |
 
 ## Screenshots
 
@@ -249,3 +249,9 @@ Contributions for additional languages are welcome!
 ## License
 
 [MIT](https://github.com/juju35/ha-water-pump-card/blob/main/LICENSE)
+
+## Support
+
+If you find this project useful, you can support its development:
+
+<a href="https://buymeacoffee.com/julienstep9"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="50"></a>

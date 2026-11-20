@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.3 - 2026-11-20
+
+### Fixes
+- The minute refresh (running for, last run, the 24-hour strip) now also runs in browsers without `ResizeObserver`.
+- README: the options table gets a *Card* column (`both` / `mini`), and a Support section.
+- Mini card: its size for the masonry view counts the 90px banner (2 rows; 1 with `illustration: false`).
+
+### Performance
+- About 420 lines of unused code copied from the room cards (rooms, lights, plugs, toggle mini card, rooms panel and their styles) are gone from the bundle.
+- The 19 room-card strings left in the shared translations (rooms, layout, columns, thresholds, sort…) are gone in every language; the editor labels and helpers this card uses are unchanged (checked in every language), and a test keeps unused shared keys out.
+
+### Maintenance
+- The commitlint config loads as an ES module: the `commit-msg` hook failed on every commit.
+- Tests: the discovery on varied devices (a Tuya plug with French names and a diagnostic power sensor, an ESPHome controller with an unavailable running sensor, psi and m³/h, hidden and foreign entities).
+
 ## 1.0.2 - 2026-11-18
 
 ### Maintenance
