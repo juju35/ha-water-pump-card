@@ -339,6 +339,11 @@ class WaterPumpCard extends RcCard {
 
   connectedCallback() {
     super.connectedCallback?.();
+    // The durations shown (running for, last run, the 24-hour strip) move on with time: drawn again every minute.
+    this._tick ??= setInterval(() => {
+      this._sig = null;
+      this._render();
+    }, 60000);
     if (typeof ResizeObserver !== "function") return;
     this._resize ??= new ResizeObserver((entries) => {
       const w = Math.round(entries.at(-1).contentRect.width);
@@ -348,10 +353,6 @@ class WaterPumpCard extends RcCard {
       this._fitFrame = requestAnimationFrame(() => this._fitPill());
     });
     this._resize.observe(this);
-    this._tick ??= setInterval(() => {
-      this._sig = null;
-      this._render();
-    }, 60000);
   }
 
   disconnectedCallback() {

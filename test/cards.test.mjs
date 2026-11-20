@@ -206,3 +206,12 @@ test("night picture: the dark theme alone, a light theme stays day after sunset;
     assert.equal(make(tag, { ...SUMP, illustration_theme: "night" }, sky("above_horizon", false))._night(), true, `${tag}: forced night`);
   }
 });
+
+test("the minute timer runs while the card is on the page, even without ResizeObserver", () => {
+  const card = make("water-pump-card", SUMP);
+  const before = wp.window.intervals.size;
+  card.connectedCallback();
+  assert.equal(wp.window.intervals.size, before + 1);
+  card.disconnectedCallback();
+  assert.equal(wp.window.intervals.size, before);
+});
