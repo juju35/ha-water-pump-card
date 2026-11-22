@@ -1,6 +1,6 @@
 {
   "name": "ha-water-pump-card",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "An illustrated Lovelace card for pumps — sump, water (well, booster) and industrial: whether it pumps, the level of its pit, its runs over 24 hours, cycles, pressure, flow and alerts.",
   "repository": {
     "type": "git",
