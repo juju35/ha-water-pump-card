@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { makeHass } from "./hass.mjs";
 import { fakeNode, load } from "./load.mjs";
+import { sources } from "./source.mjs";
 
 const wp = load();
 const { cards } = wp;
@@ -220,7 +221,7 @@ test("the minute timer runs while the card is on the page, even without ResizeOb
 // The shared strings keep only what this card uses: a static key, an editor label or helper (`ed_<field>`), a plural
 // (`open_*`, `unavail_*`) or an alarm kind of the shared status. The room cards' keys (rooms, layout, thresholds…) are gone.
 test("shared strings: no unused key of the room cards", () => {
-  const src = ["shared", "water-pump-card"].map((f) => readFileSync(new URL(`../src/${f}.js`, import.meta.url), "utf8")).join("\n");
+  const src = ["shared", "water-pump-card"].map((f) => (sources[`${f}.js`] ?? readFileSync(new URL(`../src/${f}.js`, import.meta.url), "utf8"))).join("\n");
   const code = src.replace(/const RC_I18N = \{[\s\S]*?\n\};/, "").replace(/const WP_I18N = \{[\s\S]*?\n\};/, "");
   const flat = (schema) => schema.flatMap((f) => (f.schema ? [f, ...flat(f.schema)] : [f]));
   const fields = new Set();
