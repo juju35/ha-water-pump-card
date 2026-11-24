@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6 - 2026-11-24
+
+### Maintenance
+- The card source is split into ES modules: `src/shared/` (entry `src/shared/index.js`), `src/water-pump-card/` (entry `src/water-pump-card/index.js`), cut at its sections, with the translations in one file per language (`i18n/<lang>.js`). `scripts/bundle.mjs` concatenates them back, in their original order, into the same single file and per-language files as before; the tests evaluate that bundle.
+
 ## 1.0.5 - 2026-11-22
 
 ### Performance
