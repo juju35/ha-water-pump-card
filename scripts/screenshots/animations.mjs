@@ -62,11 +62,17 @@ const step = (page, frac, seconds) =>
     }
   }, [frac, seconds]);
 
+// Two animation frames: the paused SVG clocks are only sampled at the next rendering, and a screenshot taken right after
+// setCurrentTime() can still show the previous time on some runs (a byte-different GIF without any change to the card).
+const settle = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+
 // One cycle of the card's CSS animations, stepped frame by frame.
 const recordCycle = async (page, dir, seconds) => {
   const clip = await cardClip(page, WIDTH);
   const frames = Math.round(FPS * seconds);
   for (let i = 0; i < frames; i++) {
+    await step(page, i / frames, seconds);
+    await settle(page);
     await step(page, i / frames, seconds);
     await page.screenshot({ path: join(dir, frameName(i)), clip, animations: "allow" });
   }
